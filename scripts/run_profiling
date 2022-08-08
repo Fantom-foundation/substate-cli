@@ -1,0 +1,193 @@
+#!/bin/bash
+PROGNAME=$(basename "$0")
+
+### Configurable parameters
+# output location
+LOG_PATH='./logs'
+PNG_PATH='./results'
+# Rercord parameters
+EVENT_FILE='fantom.events' #file to be imported
+GENESIS='' #optional
+OPERA_DATADIR='' #optional
+
+# Replay parameters
+WORKERS=`grep -c ^processor /proc/cpuinfo`
+FIRST_BLOCK=0
+LAST_BLOCK=41000000
+
+DATABASE_FILE="./metrics.db"
+
+# check if directories and files exist
+
+if [ ! -f "$DATABASE_FILE" ]; then
+	echo "${PROGNAME}: database ${DATABASE_FILE} does not exist."
+	exit 1
+fi
+
+### Functions
+Help()
+{
+	echo "${PROGNAME}: run Fantom's off-the-chain analysis."
+	echo "Syntax: run_experiemnt <action> <metrics>"
+	echo "  actions"
+	echo "     record  records substates and generate evm-call metrics data in a log file."
+	echo "     replay  replays substates and generate metrics data in a log file."
+	echo "     extract extracts data from a log file and stores in a database."
+	echo "     plot    plots graphs for speficied metrics."
+	echo "     all     performs replay, extract and plot."
+	echo "  metrics"
+	echo "     storage-update gets storage update size after each substate"
+	echo "     code-size      gets code size of smart contracts"
+	echo "     evm-call       gets runtime of evm calls"
+	echo "     evm-opcode     gets statistics of evm opcodes"
+}
+
+HandleError() {
+	if [ "$1" -ne 0 ]
+	then
+		echo "${PROGNAME}: failed executing $2 for metric $3"
+		exit 1
+	fi
+}
+
+Run() {
+	ACTION=$1
+	METRIC=$2
+	LOG_FILE="${LOG_PATH}/${METRIC}.log"
+	if [ "$ACTION" = "record" ] || { [ "$ACTION" = "all" ] && [ ${METRIC} = "evm-call" ]; }; then
+		if [ ! -d "$LOG_PATH" ]; then
+			echo "${PROGNAME}: log path ${LOG_PATH} does not exist."
+			exit 1
+		fi
+		if [ ! -f "$EVENT_FILE" ]; then
+			echo "${PROGNAME}: event file ${EVENT_FILE} does not exist."
+			exit 1
+		fi
+		LOG_RECORD="${LOG_PATH}/record_${METRIC}.log"
+		echo "${PROGNAME}: Record substates for ${METRIC} via 'opera import'"
+		if [ -n ${GENESIS} ]; then
+			GENESIS_OPT="--genesis ${GENESIS}"
+		fi
+		if [ -n ${OPERA_DATADIR} ]; then
+			DATADIR_OPT="--datadir ${OPERA_DATADIR}"
+		fi
+		trap ' ' INT
+		../build/opera ${GENESIS_OPT} import events --recording --substatedir ../substate.fantom --profiling-call ${DATADIR_OPT} ${EVENT_FILE} > ${LOG_RECORD}
+		DATABASE=${DATABASE_FILE} ./create_recorded_runtime_table ${LOG_RECORD}
+		HandleError $? "record action" ${METRIC}
+
+	fi
+	if [ "$ACTION" = "replay" ] || [ "$ACTION" = "all" ]; then
+		echo "${PROGNAME}: Replay substates for ${METRIC} from block ${FIRST_BLOCK} to block ${LAST_BLOCK} using ${WORKERS} threads."
+		if [ ! -d "$LOG_PATH" ]; then
+			echo "${PROGNAME}: log path ${LOG_PATH} does not exist."
+			exit 1
+		fi
+		echo "${PROGNAME}: Write output to ${LOG_FILE}."
+		if [ "$METRIC" = "storage-update" ]; then
+			../build/substate-cli storage-size --workers ${WORKERS} --substatedir ../substate.fantom ${FIRST_BLOCK} ${LAST_BLOCK} > ${LOG_FILE}
+			HandleError $? "replay action" ${METRIC}
+		elif [ "$METRIC" = "code-size" ]; then
+			../build/substate-cli code-size --workers ${WORKERS} --substatedir ../substate.fantom ${FIRST_BLOCK} ${LAST_BLOCK} > ${LOG_FILE}
+			HandleError $? "replay action" ${METRIC}
+		elif [ "$METRIC" = "evm-call" ]; then
+			../build/substate-cli replay --profiling-call --workers ${WORKERS} --substatedir ../substate.fantom ${FIRST_BLOCK} ${LAST_BLOCK} > ${LOG_FILE}
+			HandleError $? "replay action" ${METRIC}
+		elif [ "$METRIC" = "evm-opcode" ]; then
+			../build/substate-cli replay --profiling-opcode --workers ${WORKERS} --substatedir ../substate.fantom ${FIRST_BLOCK} ${LAST_BLOCK} > ${LOG_FILE}
+			HandleError $? "replay action" ${METRIC}
+		fi
+	fi
+	if [ "$ACTION" = "extract" ] || [ "$ACTION" = "all" ]; then
+		echo "${PROGNAME}: Extract ${METRIC} data from ${LOG_FILE}."
+		if [ ! -f "$LOG_FILE" ]; then
+			echo "${PROGNAME}: log file ${LOG_FILE} does not exist."
+			exit 1
+		fi
+		if [ "$METRIC" = "storage-update" ]; then
+			DATABASE=${DATABASE_FILE} ./create_storage_table ${LOG_FILE}
+			HandleError $? "extract action" ${METRIC}
+		elif [ "$METRIC" = "code-size" ]; then
+			DATABASE=${DATABASE_FILE} ./create_code_size_table ${LOG_FILE}
+			HandleError $? "extract action" ${METRIC}
+		elif [ "$METRIC" = "evm-call" ]; then
+			LOG_RECORD="${LOG_PATH}/record_${METRIC}.log"
+			DATABASE=${DATABASE_FILE} ./create_recorded_runtime_table ${LOG_RECORD}
+			ERR_REC=$?
+			DATABASE=${DATABASE_FILE} ./create_replayed_runtime_table ${LOG_FILE}
+			ERR_REP=$?
+			HandleError ${ERR_REC} "extract action (recorded)" ${METRIC}
+			HandleError ${ERR_REP} "extract action (replayed)" ${METRIC}
+		elif [ "$METRIC" = "evm-opcode" ]; then
+			DATABASE=${DATABASE_FILE} ./create_opcode_stats_table ${LOG_FILE}
+			HandleError $? "extract action" ${METRIC}
+		fi
+
+	fi
+	if [ "$ACTION" = "plot" ] || [ "$ACTION" = "all" ]; then
+		echo "${PROGNAME}: Plot graphs from ${METRIC} data."
+		if [ ! -d "$PNG_PATH" ]; then
+			echo "${PROGNAME}: image output path ${PNG_PATH} does not exist."
+			exit 1
+		fi
+		if [ "$METRIC" = "storage-update" ]; then
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_storage_graphs
+			HandleError $? "plot action" ${METRIC}
+		elif [ "$METRIC" = "code-size" ]; then
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_code_size_graphs
+			HandleError $? "extract action" ${METRIC}
+		elif [ "$METRIC" = "evm-call" ]; then
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_runtime_graphs
+			HandleError $? "extract action" ${METRIC}
+		elif [ "$METRIC" = "evm-opcode" ]; then
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_opcode_stats_graphs
+			HandleError $? "extract action" ${METRIC}
+		fi
+	fi
+}
+
+### Main
+# Check number of arguments. Must have at least 2 arguments
+if [ "$#" -lt 2 ]; then
+    Help
+    exit 1
+fi
+
+case "$1" in
+	"replay"|"extract"|"plot"|"all"|"record")
+		ACTION=$1 #executable action
+		;;
+	*)
+		echo "Unknown action $1"
+		Help
+		exit 1
+		;;
+esac
+
+for i in "${@:2}"
+do
+	echo "Run ${PROGNAME} with arguments ${ACTION} ${i}"
+	if [ "$ACTION" == "recorded" ]; then
+		case $i in
+			"evm-call")
+				Run $ACTION $i
+				;;
+			*)
+				echo "Unknown metric for record action: ${i}"
+				Help
+				exit 1
+				;;
+		esac
+	else
+		case $i in
+			"storage-update"|"code-size"|"evm-call"|"evm-opcode")
+				Run $ACTION $i
+				;;
+			*)
+				echo "Unknown metric: ${i}"
+				Help
+				exit 1
+				;;
+		esac
+	fi
+done
