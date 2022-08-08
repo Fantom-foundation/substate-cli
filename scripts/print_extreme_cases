@@ -1,0 +1,90 @@
+#!/bin/bash
+# Program report accounts with highest/lowest value in metrics
+
+if [ -z ${DATABASE} ]; then
+	DATABASE=/var/data/substate_metrics.db
+fi
+
+function runsql () {
+   sqlite3 $1 <<< "$2"
+   if [ $? -ne 0 ]
+   then
+	echo "${PROGNAME}: sqlite3 failed executing $2 on db $1"
+	exit 1
+   fi
+}
+
+
+# evm runtime
+echo "EVM runtime metrics"
+echo "Total replay runtime in hours"
+runsql ${DATABASE} ".headers on
+SELECT MAX(total_runtime)/3600 total_runtime from summary_contract_runtime;"
+echo
+
+echo "Total recorded runtime in hours"
+runsql ${DATABASE} ".headers on
+SELECT MAX(total_runtime)/3600 total_runtime from summary_recorded_contract_runtime;"
+echo
+
+echo "Smart contract with the highest total time"
+runsql ${DATABASE} ".headers on
+SELECT contract, invocations, MAX(total_runtime) total_runtime, total_runtime/invocations runtime_per_invocation from summary_contract_runtime;"
+echo
+
+echo "Smart contract with the highest invocation"
+runsql ${DATABASE} ".headers on
+SELECT contract, MAX(invocations) invocations, total_runtime, total_runtime/invocations runtime_per_invocation from summary_contract_runtime;"
+echo
+
+echo "Smart contract with the longest runtime per invocation"
+runsql ${DATABASE} ".headers on
+SELECT contract, invocations, total_runtime, MAX(total_runtime/invocations) runtime_per_invocation from summary_contract_runtime;"
+echo
+
+# micro profiling
+echo
+echo "Total opcode"
+runsql ${DATABASE} ".headers on
+SELECT SUM(freq) from opcode_frequency;"
+echo
+
+# storage
+echo
+echo "Storage metrics"
+echo "Percentage accounts with storage"
+runsql ${DATABASE} ".headers on
+SELECT (SELECT COUNT(*)  FROM max_contract_storage where storage_bytes > 0) * 100.0 / COUNT(*) FROM max_contract_storage;"
+echo
+
+echo "Percentage accounts with at least 1KBytes storage"
+runsql ${DATABASE} ".headers on
+SELECT (SELECT COUNT(*)  FROM max_contract_storage where storage_bytes > 1000) * 100.0 / COUNT(*) FROM max_contract_storage;"
+echo
+
+echo "Smart contract with the largest storage"
+runsql ${DATABASE} ".headers on
+SELECT contract, max(storage_bytes) FROM max_contract_storage;"
+echo
+
+echo "Transaction with the largest storage increase"
+runsql ${DATABASE} ".headers on
+SELECT block_number, tx_number, max(storage_update_bytes) FROM transaction_storage_updates;"
+echo
+
+echo "Transaction with the largest storage decrease"
+runsql ${DATABASE} ".headers on
+SELECT block_number, tx_number, min(storage_update_bytes) FROM transaction_storage_updates;"
+echo
+
+# code sizea
+echo
+echo "Smart contract with the largest code size"
+runsql ${DATABASE} ".headers on
+SELECT contract, MAX(code_size_bytes), nonce FROM contract_code_size"
+echo
+
+echo "Smart contract with the largest nonce"
+runsql ${DATABASE} ".headers on
+SELECT contract, code_size_bytes, MAX(nonce) FROM contract_code_size where code_size_bytes > 0"
+echo

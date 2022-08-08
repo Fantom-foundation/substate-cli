@@ -1,4 +1,5 @@
 #!/bin/bash
+# collects, extracts and visualizes blockchain metrics using off-the-chain testing framework
 PROGNAME=$(basename "$0")
 
 ### Configurable parameters
@@ -73,7 +74,7 @@ Run() {
 		fi
 		trap ' ' INT
 		../build/opera ${GENESIS_OPT} import events --recording --substatedir ../substate.fantom --profiling-call ${DATADIR_OPT} ${EVENT_FILE} > ${LOG_RECORD}
-		DATABASE=${DATABASE_FILE} ./create_recorded_runtime_table ${LOG_RECORD}
+		DATABASE=${DATABASE_FILE} ./metric_scripts/create_recorded_runtime_table ${LOG_RECORD}
 		HandleError $? "record action" ${METRIC}
 
 	fi
@@ -105,21 +106,21 @@ Run() {
 			exit 1
 		fi
 		if [ "$METRIC" = "storage-update" ]; then
-			DATABASE=${DATABASE_FILE} ./create_storage_table ${LOG_FILE}
+			DATABASE=${DATABASE_FILE} ./metric_scripts/create_storage_table ${LOG_FILE}
 			HandleError $? "extract action" ${METRIC}
 		elif [ "$METRIC" = "code-size" ]; then
-			DATABASE=${DATABASE_FILE} ./create_code_size_table ${LOG_FILE}
+			DATABASE=${DATABASE_FILE} ./metric_scripts/create_code_size_table ${LOG_FILE}
 			HandleError $? "extract action" ${METRIC}
 		elif [ "$METRIC" = "evm-call" ]; then
 			LOG_RECORD="${LOG_PATH}/record_${METRIC}.log"
-			DATABASE=${DATABASE_FILE} ./create_recorded_runtime_table ${LOG_RECORD}
+			DATABASE=${DATABASE_FILE} ./metric_scripts/create_recorded_runtime_table ${LOG_RECORD}
 			ERR_REC=$?
-			DATABASE=${DATABASE_FILE} ./create_replayed_runtime_table ${LOG_FILE}
+			DATABASE=${DATABASE_FILE} ./metric_scripts/create_replayed_runtime_table ${LOG_FILE}
 			ERR_REP=$?
 			HandleError ${ERR_REC} "extract action (recorded)" ${METRIC}
 			HandleError ${ERR_REP} "extract action (replayed)" ${METRIC}
 		elif [ "$METRIC" = "evm-opcode" ]; then
-			DATABASE=${DATABASE_FILE} ./create_opcode_stats_table ${LOG_FILE}
+			DATABASE=${DATABASE_FILE} ./metric_scripts/create_opcode_stats_table ${LOG_FILE}
 			HandleError $? "extract action" ${METRIC}
 		fi
 
@@ -131,16 +132,16 @@ Run() {
 			exit 1
 		fi
 		if [ "$METRIC" = "storage-update" ]; then
-			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_storage_graphs
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./metric_scripts/plot_storage_graphs
 			HandleError $? "plot action" ${METRIC}
 		elif [ "$METRIC" = "code-size" ]; then
-			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_code_size_graphs
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./metric_scripts/plot_code_size_graphs
 			HandleError $? "extract action" ${METRIC}
 		elif [ "$METRIC" = "evm-call" ]; then
-			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_runtime_graphs
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./metric_scripts/plot_runtime_graphs
 			HandleError $? "extract action" ${METRIC}
 		elif [ "$METRIC" = "evm-opcode" ]; then
-			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./plot_opcode_stats_graphs
+			DATABASE=${DATABASE_FILE} OUTDIR=${PNG_PATH} ./metric_scripts/plot_opcode_stats_graphs
 			HandleError $? "extract action" ${METRIC}
 		fi
 	fi

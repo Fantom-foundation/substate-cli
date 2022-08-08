@@ -1,85 +1,48 @@
-# Substate-cli
-In addition to functionality testing, the recorder/replayer is useful to obtain execution metrics for smart contracts such as EVM call runtime or opcode/instruction statistics. ```substate-cli``` is a command-line interface for the replayer and applications to obtain mentioned metrics. 
+# Profiling Scripts
+Scripts for running metric collections using the Recoder/Repalyer framework. 
 
-```
-NAME:
-   substate-cli - Fantom substate command line interface
-
-USAGE:
-   substate-cli [global options] command [command options] [arguments...]
-
-VERSION:
-   1.10.8-stable
-
-COMMANDS:
-     replay        executes full state transitions and checks output consistency
-     storage-size  returns changes in storage size by transactions in the specified block range
-     code-size     reports code size and nonce of smart contracts in the specified block range
-     dump          returns content in substates in json format
-     db            A set of commands on substate DB
-     help, h       Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --help, -h     show help
-   --version, -v  print the version
-```
-
-### Substate Replayer
-To execute substrate in a given block range,
+### Usage:
+```run_profiling``` requires exactly 1 action and at least 1 metric
 ```shell
-substate-cli replay 0 41000000
+./run_profiling <action> <metrics>
 ```
-
+For example, the following runs end-to-end profiling on two metrics: ```storage-update``` and ```evm-call```. This includes running the replayer, extracting raw data, storing metrics to a database and generating metric graphs.
+```
+./run_profiling all storage-update evm-call
+```
+### Actions
+List of available actions
+- ```record```  records substates and generate evm-call metrics data in a log file.
+- ```replay```  replays substates and generate metrics data in a log file.
+- ```extract``` extracts data from a log file and store in a database.
+- ```plot```    plots graphs for specified metrics.
+- ```all```     performs replay, extract and plot.
  
-### EVM Call Runtime
-To measure EVM call runtime of transactions in a given block range,
-```shell
-substate-cli replay --profiling-call  0 41000000
-```
+List of available metrics
+- ```storage-update``` gets storage update size after each transaction
+- ```code-size```      gets code size of smart contracts
+- ```evm-call```       gets runtime of evm calls
+- ```evm-opcode```     gets statistics of evm opcodes
 
-Output format
-```
-call: <Block>, <Nonce>, <Account>, <runtime in ns>
-```
+## Requirements
+- ```sqlite3``` database for storing metrics.
+- ```gnuplot``` for plotting metric graphs.
 
-### EVM Micro Profiling
-To get micro-profiling statistics,
-```shell
-substate-cli replay --profiling-opcode 0 41000000
-```
-The returned statistics include
+## Configurations
+Before start the profiling script, parameters such as preferred file locations, block range and event file should be configured in ```./run_profiling```.
+### General configuration
+```DATABASE_FILE```: Sqlite3 database location where metrics are stored.
+```LOG_PATH```:  Output path for generated logs from substate-cli command.
+```PNG_PATH```: Output path for metric graphs.
 
- - **opcode frequency:** the total number of times an opcode is used.
- - **opcode runtime:** the total runtime of an opcode in nanoseconds.
- - **instruction frequency:** a distribution showing number of times an instruction is executed.
- - **step length frequency:** a distribution showing number of steps per smart contract invocation.
+### The Replayer configuration
+These parameters are required to execute ```replay``` command.
+```WORKERS```: Number of worker threads that execute substates in parallel.
+```FIRST_BLOCK```: The first block to replay transactions.
+```LAST_BLOCK```: The last block to replay transaction (inclusive range).
 
-Output format
-```
-opcode-freq: <opcode>, <execution count>
-opcode-runtime: <opcode>, <total runtime in ns>
-instruction-freq: <execution frequency>, <instruction count>
-steplen-freq: <execution steps>, <number of contracts>
-```
-
-### Blockchain Storage
-To profile storage update size after each transaction in a given block range,
-```shell
-substate-cli storage-size 0 41000000
-```
-
-Output format
-```
-metric: <Block>, <Transaction>, <Unix timestamp>, <Account>, <Storage size change> ,<Size in input substate>, <Size in output substate>
-```
-
-### Smart Contract Code Size 
-To profile smart contract code size and nonce in a given block range,
-```shell
-substate-cli code-size 0 41000000
-```
-
-Output format
-```
-metric: <Block>, <Transaction>, <Unix timestamp>, <Account>, <Code size> ,<Nonce>, <Transaction type>
-```
+### The Recorder configuration
+These parameters are required to execute ```record``` command.
+```EVENT_FILE```: Fantom event files exported from Fantom chain via ```opera export```.
+```GENESIS```: Fantom genesis file (optional).
+```OPERA_DATADIR```: Chaindata directory (optional).
