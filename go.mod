@@ -45,7 +45,7 @@ require (
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
 
-replace github.com/ethereum/go-ethereum => github.com/b-scholz/go-ethereum rr1.10.8-ftm-rc4-vm
-replace github.com/Fantom-foundation/go-opera => github.com/b-scholz/go-opera record-replay
+replace github.com/ethereum/go-ethereum => github.com/Fantom-foundation/go-ethereum-substate rr1.10.8-ftm-rc4-vm
+replace github.com/Fantom-foundation/go-opera => github.com/Fantom-foundation/go-opera-substate record-replay
 
 replace github.com/dvyukov/go-fuzz => github.com/guzenok/go-fuzz v0.0.0-20210103140116-f9104dfb626f
