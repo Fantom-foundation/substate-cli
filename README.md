@@ -6,14 +6,8 @@ Fantom's off-the-chain testing framework based on [Transaction Substate Recorder
 To build all substate-cli, run ```make```.   You can find ```substate-cli``` binary in the build directory.
 
 ```substate-cli``` module requires
- 1. ```go-opera``` from [record-replay branch](https://github.com/b-scholz/go-opera/tree/record-replay)
- 2. ```go-ethereum``` from [rr1.10.8-ftm-rc4-vm branch](https://github.com/b-scholz/go-ethereum/tree/rr1.10.8-ftm-rc4-vm)
-
-One may replace the above modules with local files in  ```go.mod``` by changing the following lines,
-```
-replace github.com/ethereum/go-ethereum => /path/to/go-etheruem
-replace github.com/Fantom-foundation/go-opera => /path/to/go-opera
-```
+ 1. ```go-opera``` from [go-opera-substate](https://github.com/Fantom-foundation/go-opera-substate) repo
+ 2. ```go-ethereum``` from [go-ethereum-substate](https://github.com/Fantom-foundation/go-ethereum-substate) repo
 
 ## Running the replayer
 To replay substrate in a given block range,
