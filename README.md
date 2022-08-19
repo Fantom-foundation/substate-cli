@@ -51,6 +51,7 @@ COMMANDS:
      replay        executes full state transitions and checks output consistency
      storage-size  returns changes in storage size by transactions in the specified block range
      code-size     reports code size and nonce of smart contracts in the specified block range
+     code          write all contracts into a contract database
      dump          returns content in substates in json format
      db            A set of commands on substate DB
      help, h       Shows a list of commands or help for one command
@@ -119,3 +120,7 @@ Output format
 ```
 metric: <Block>, <Transaction>, <Unix timestamp>, <Account>, <Code size> ,<Nonce>, <Transaction type>
 ```
+
+### Contract Database
+Produce a contract database for a block range. All smart contracts in this block range are written into a contract database.
+The contract database is a levelDB instance. The keys are the smart contract addressed and their values are the bytecode of the contract.

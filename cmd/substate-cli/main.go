@@ -35,6 +35,7 @@ func init() {
 	app.Commands = []cli.Command{
 		replay.ReplayCommand,
 		replay.GetStorageUpdateSizeCommand,
+		replay.GetCodeCommand,
 		replay.GetCodeSizeCommand,
 		replay.SubstateDumpCommand,
 		dbCommand,
