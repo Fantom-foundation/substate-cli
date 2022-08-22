@@ -40,6 +40,7 @@ func init() {
 		replay.SubstateDumpCommand,
 		replay.GetAddressStatsCommand,
 		replay.GetKeyStatsCommand,
+		replay.GetLocationStatsCommand,
 		dbCommand,
 	}
 	cli.CommandHelpTemplate = flags.CommandHelpTemplate

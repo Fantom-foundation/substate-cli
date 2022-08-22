@@ -6,7 +6,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-// record-replay: substate-cli address stats command
+// record-replay: substate-cli address-stats command
 var GetAddressStatsCommand = cli.Command{
 	Action:    getAddressStatsAction,
 	Name:      "address-stats",

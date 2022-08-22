@@ -6,7 +6,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-// record-replay: substate-cli key stats command
+// record-replay: substate-cli key-stats command
 var GetKeyStatsCommand = cli.Command{
 	Action:    getKeyStatsAction,
 	Name:      "key-stats",
