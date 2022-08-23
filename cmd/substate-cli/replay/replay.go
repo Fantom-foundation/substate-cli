@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
+	"runtime/pprof"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/Fantom-foundation/go-opera/evmcore"
 	"github.com/Fantom-foundation/go-opera/opera"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -22,23 +24,29 @@ var (
 	gitCommit = "" // Git SHA1 commit hash of the release (set via linker flags)
 	gitDate   = ""
 )
+
 // chain id
 var chainID int
 var ChainIDFlag = cli.IntFlag{
-		Name:  "chainid",
-		Usage: "ChainID for replayer",
-		Value: 250,
-	}
+	Name:  "chainid",
+	Usage: "ChainID for replayer",
+	Value: 250,
+}
 
 var ProfileEVMCallFlag = cli.BoolFlag{
-		Name:  "profiling-call",
-		Usage: "enable profiling for EVM call",
-	}
+	Name:  "profiling-call",
+	Usage: "enable profiling for EVM call",
+}
 
 var ProfileEVMOpCodeFlag = cli.BoolFlag{
-		Name:  "profiling-opcode",
-		Usage: "enable profiling for EVM opcodes",
-	}
+	Name:  "profiling-opcode",
+	Usage: "enable profiling for EVM opcodes",
+}
+
+var CpuProfilingFlag = cli.StringFlag{
+	Name:  "cpuprofile",
+	Usage: "the file name where to write a CPU profile of the evaluation step to",
+}
 
 // record-replay: substate-cli replay command
 var ReplayCommand = cli.Command{
@@ -55,6 +63,7 @@ var ReplayCommand = cli.Command{
 		ChainIDFlag,
 		ProfileEVMCallFlag,
 		ProfileEVMOpCodeFlag,
+		CpuProfilingFlag,
 	},
 	Description: `
 The substate-cli replay command requires two arguments:
@@ -217,9 +226,9 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	chainID = ctx.Int(ChainIDFlag.Name)
-	fmt.Printf("chain-id: %v\n",chainID)
+	fmt.Printf("chain-id: %v\n", chainID)
 	fmt.Printf("git-date: %v\n", gitDate)
-	fmt.Printf("git-commit: %v\n",gitCommit)
+	fmt.Printf("git-commit: %v\n", gitCommit)
 
 	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
 	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)
@@ -234,15 +243,26 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	if ctx.Bool(ProfileEVMCallFlag.Name) {
-		vm.ProfileEVMCall = true;
+		vm.ProfileEVMCall = true
 	}
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
-		vm.ProfileEVMOpCode = true;
+		vm.ProfileEVMOpCode = true
 	}
 
 	substate.SetSubstateFlags(ctx)
 	substate.OpenSubstateDBReadOnly()
 	defer substate.CloseSubstateDB()
+
+	// Start CPU profiling if requested.
+	profile_file_name := ctx.String(CpuProfilingFlag.Name)
+	if profile_file_name != "" {
+		f, err := os.Create(profile_file_name)
+		if err != nil {
+			return err
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	taskPool := substate.NewSubstateTaskPool("substate-cli replay", replayTask, uint64(first), uint64(last), ctx)
 	err = taskPool.Execute()
