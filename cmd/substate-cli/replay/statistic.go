@@ -41,13 +41,15 @@ func (a *AccessStatistics[T]) PrintSummary() {
 
 	fmt.Printf("Reference frequency distribution:\n")
 	for i := 0; i < 100; i++ {
-		fmt.Printf("%d,%d\n", i, list[i*len(list)/100])
+		fmt.Printf("%d, %d\n", i, list[i*len(list)/100])
 	}
-	fmt.Printf("100,%d\n", list[len(list)-1])
+	fmt.Printf("100, %d\n", list[len(list)-1])
 	fmt.Printf("Number of targets:          %15d\n", count)
 	fmt.Printf("Number of references:       %15d\n", sum)
 	fmt.Printf("Average references/target:  %15.2f\n", float32(sum)/float32(count))
 }
+
+type AccessStatisticsConsumer[T comparable] func(*AccessStatistics[T])
 
 // ----------------------------- Access Statistic Tools ---------------------------------
 
@@ -89,6 +91,12 @@ func collectStats[T comparable](dest chan<- T, extract Extractor[T], block uint6
 // getReferenceStatsAction a generic utility to collect access statistics from recorded
 // substate data.
 func getReferenceStatsAction[T comparable](ctx *cli.Context, cli_command string, extract Extractor[T]) error {
+	return getReferenceStatsActionWithConsumer(ctx, cli_command, extract, func(*AccessStatistics[T]) {})
+}
+
+// getReferenceStatsActionWithConsumer extends the abilitities of the function above by
+// allowing some post-processing to be applied on the collected statistics.
+func getReferenceStatsActionWithConsumer[T comparable](ctx *cli.Context, cli_command string, extract Extractor[T], consume AccessStatisticsConsumer[T]) error {
 	var err error
 
 	if len(ctx.Args()) != 2 {
@@ -149,5 +157,6 @@ func getReferenceStatsAction[T comparable](ctx *cli.Context, cli_command string,
 	fmt.Printf("\n\n----- Summary: -------\n")
 	stats.PrintSummary()
 	fmt.Printf("----------------------\n")
+	consume(&stats)
 	return nil
 }
