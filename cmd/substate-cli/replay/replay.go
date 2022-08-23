@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	_ "github.com/ethereum/go-ethereum/core/vm/lfvm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
@@ -43,6 +44,16 @@ var ProfileEVMOpCodeFlag = cli.BoolFlag{
 	Usage: "enable profiling for EVM opcodes",
 }
 
+var OnlySuccessfulFlag = cli.BoolFlag{
+	Name:  "only-successful",
+	Usage: "only runs transactions that have been successful",
+}
+
+var InterpreterImplFlag = cli.StringFlag{
+	Name:  "interpreter",
+	Usage: "select the interpreter version to be used",
+}
+
 var CpuProfilingFlag = cli.StringFlag{
 	Name:  "cpuprofile",
 	Usage: "the file name where to write a CPU profile of the evaluation step to",
@@ -63,6 +74,8 @@ var ReplayCommand = cli.Command{
 		ChainIDFlag,
 		ProfileEVMCallFlag,
 		ProfileEVMOpCodeFlag,
+		InterpreterImplFlag,
+		OnlySuccessfulFlag,
 		CpuProfilingFlag,
 	},
 	Description: `
@@ -73,8 +86,18 @@ The substate-cli replay command requires two arguments:
 last block of the inclusive range of blocks to replay transactions.`,
 }
 
+type ReplayConfig struct {
+	vm_impl         string
+	only_successful bool
+}
+
 // replayTask replays a transaction substate
-func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
+func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
+
+	// If requested, skip failed transactions.
+	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
+		return nil
+	}
 
 	inputAlloc := recording.InputAlloc
 	inputEnv := recording.Env
@@ -147,6 +170,7 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 	}
 	vmConfig.Tracer = tracer
 	vmConfig.Debug = (tracer != nil)
+	vmConfig.InterpreterImpl = config.vm_impl
 	statedb.Prepare(txHash, txIndex)
 
 	txCtx := evmcore.NewEVMTxContext(msg)
@@ -264,7 +288,16 @@ func replayAction(ctx *cli.Context) error {
 		defer pprof.StopCPUProfile()
 	}
 
-	taskPool := substate.NewSubstateTaskPool("substate-cli replay", replayTask, uint64(first), uint64(last), ctx)
+	var config = ReplayConfig{
+		vm_impl:         ctx.String(InterpreterImplFlag.Name),
+		only_successful: ctx.Bool(OnlySuccessfulFlag.Name),
+	}
+
+	task := func(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
+		return replayTask(config, block, tx, recording, taskPool)
+	}
+
+	taskPool := substate.NewSubstateTaskPool("substate-cli replay", task, uint64(first), uint64(last), ctx)
 	err = taskPool.Execute()
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
