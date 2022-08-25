@@ -109,7 +109,35 @@ func writeBasicBlocks() {
 		log.Fatalln(err.Error())
 	}
 	for contract, freqMap := range JumpDestFrequency {
-		for pc, freq := range freqMap {
+		for start, freq := range freqMap {
+			pc := start
+			for {
+				if (pc >= uint64(len(code))) { 
+					break
+				}
+				op := OpCode(CodeRegistry[contract][pc])
+
+				// add exit condition basic block
+				if int8(op) < int8(PUSH1) { // If not PUSH (the int8(op) > int(PUSH32) is always false).
+					continue
+				}
+
+				// add exit op-codes 
+
+
+				// skip constants of PUSH operations
+				pc++
+				numbits := op - PUSH1 + 1
+				if numbits >= 8 {
+					for ; numbits >= 16; numbits -= 16 {
+						pc += 16
+					}
+					for ; numbits >= 8; numbits -= 8 {
+						pc += 8
+					}
+				}
+				pc += numbits
+			}
                         instructions := [] byte{1,2}
 			_, err = statement.Exec(contract.String(), pc, freq, instructions) 
 			if err != nil { 
