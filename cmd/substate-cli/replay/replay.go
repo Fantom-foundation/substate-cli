@@ -7,6 +7,8 @@ import (
 	"os"
 	"runtime/pprof"
 	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/Fantom-foundation/go-opera/evmcore"
 	"github.com/Fantom-foundation/go-opera/opera"
@@ -84,6 +86,20 @@ The substate-cli replay command requires two arguments:
 
 <blockNumFirst> and <blockNumLast> are the first and
 last block of the inclusive range of blocks to replay transactions.`,
+}
+
+var vm_duration time.Duration
+
+func resetVmDuration() {
+	atomic.StoreInt64((*int64)(&vm_duration), 0)
+}
+
+func addVmDuration(delta time.Duration) {
+	atomic.AddInt64((*int64)(&vm_duration), (int64)(delta))
+}
+
+func getVmDuration() time.Duration {
+	return time.Duration(atomic.LoadInt64((*int64)(&vm_duration)))
 }
 
 type ReplayConfig struct {
@@ -169,7 +185,9 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	evm := vm.NewEVM(blockCtx, txCtx, statedb, chainConfig, vmConfig)
 
 	snapshot := statedb.Snapshot()
+	start := time.Now()
 	msgResult, err := evmcore.ApplyMessage(evm, msg, gaspool)
+	addVmDuration(time.Since(start))
 
 	if err != nil {
 		statedb.RevertToSnapshot(snapshot)
@@ -382,8 +400,11 @@ func replayAction(ctx *cli.Context) error {
 		return replayTask(config, block, tx, recording, taskPool)
 	}
 
+	resetVmDuration()
 	taskPool := substate.NewSubstateTaskPool("substate-cli replay", task, uint64(first), uint64(last), ctx)
 	err = taskPool.Execute()
+
+	fmt.Printf("substate-cli replay: net VM time: %v\n", getVmDuration())
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
 		vm.PrintStatistics()
