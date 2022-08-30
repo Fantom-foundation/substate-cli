@@ -1,6 +1,6 @@
 module github.com/Fantom-foundation/substate-cli
 
-go 1.14
+go 1.18
 
 require (
 	github.com/Fantom-foundation/go-opera v1.1.1-rc.2
