@@ -109,7 +109,6 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	var (
 		vmConfig    vm.Config
 		chainConfig *params.ChainConfig
-		getTracerFn func(txIndex int, txHash common.Hash) (tracer vm.Tracer, err error)
 	)
 
 	vmConfig = opera.DefaultVMConfig
@@ -119,10 +118,6 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	chainConfig.ChainID = big.NewInt(int64(chainID))
 	chainConfig.LondonBlock = new(big.Int).SetUint64(37534833)
 	chainConfig.BerlinBlock = new(big.Int).SetUint64(37455223)
-
-	getTracerFn = func(txIndex int, txHash common.Hash) (tracer vm.Tracer, err error) {
-		return nil, nil
-	}
 
 	var hashError error
 	getHash := func(num uint64) common.Hash {
@@ -164,12 +159,8 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 
 	msg := inputMessage.AsMessage()
 
-	tracer, err := getTracerFn(txIndex, txHash)
-	if err != nil {
-		return err
-	}
-	vmConfig.Tracer = tracer
-	vmConfig.Debug = (tracer != nil)
+	vmConfig.Tracer = nil
+	vmConfig.Debug = false
 	vmConfig.InterpreterImpl = config.vm_impl
 	statedb.Prepare(txHash, txIndex)
 
