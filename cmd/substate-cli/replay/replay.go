@@ -150,7 +150,8 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 
 	// Apply Message
 	var (
-		statedb   = MakeOffTheChainStateDB(inputAlloc)
+		//statedb = MakeOffTheChainStateDB(inputAlloc)
+		statedb   = MakeInMemoryStateDB(&inputAlloc)
 		gaspool   = new(evmcore.GasPool)
 		blockHash = common.Hash{0x01}
 		txHash    = common.Hash{0x02}
@@ -217,7 +218,8 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	}
 	evmResult.GasUsed = msgResult.UsedGas
 
-	evmAlloc := statedb.SubstatePostAlloc
+	evmAlloc := statedb.GetSubstatePostAlloc()
+	//evmAlloc := statedb.SubstatePostAlloc
 
 	r := outputResult.Equal(evmResult)
 	a := outputAlloc.Equal(evmAlloc)
