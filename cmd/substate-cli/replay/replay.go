@@ -61,6 +61,11 @@ var CpuProfilingFlag = cli.StringFlag{
 	Usage: "the file name where to write a CPU profile of the evaluation step to",
 }
 
+var UseInMemoryStateDbFlag = cli.BoolFlag{
+	Name:  "faststatedb",
+	Usage: "enables a faster, yet still experimental StateDB implementation",
+}
+
 // record-replay: substate-cli replay command
 var ReplayCommand = cli.Command{
 	Action:    replayAction,
@@ -79,6 +84,7 @@ var ReplayCommand = cli.Command{
 		InterpreterImplFlag,
 		OnlySuccessfulFlag,
 		CpuProfilingFlag,
+		UseInMemoryStateDbFlag,
 	},
 	Description: `
 The substate-cli replay command requires two arguments:
@@ -103,8 +109,9 @@ func getVmDuration() time.Duration {
 }
 
 type ReplayConfig struct {
-	vm_impl         string
-	only_successful bool
+	vm_impl          string
+	only_successful  bool
+	use_in_memory_db bool
 }
 
 // replayTask replays a transaction substate
@@ -148,10 +155,15 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 		return h
 	}
 
+	var statedb StateDB
+	if config.use_in_memory_db {
+		statedb = MakeInMemoryStateDB(&inputAlloc)
+	} else {
+		statedb = MakeOffTheChainStateDB(inputAlloc)
+	}
+
 	// Apply Message
 	var (
-		//statedb = MakeOffTheChainStateDB(inputAlloc)
-		statedb   = MakeInMemoryStateDB(&inputAlloc)
 		gaspool   = new(evmcore.GasPool)
 		blockHash = common.Hash{0x01}
 		txHash    = common.Hash{0x02}
@@ -219,7 +231,6 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	evmResult.GasUsed = msgResult.UsedGas
 
 	evmAlloc := statedb.GetSubstatePostAlloc()
-	//evmAlloc := statedb.SubstatePostAlloc
 
 	r := outputResult.Equal(evmResult)
 	a := outputAlloc.Equal(evmAlloc)
@@ -394,8 +405,9 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	var config = ReplayConfig{
-		vm_impl:         ctx.String(InterpreterImplFlag.Name),
-		only_successful: ctx.Bool(OnlySuccessfulFlag.Name),
+		vm_impl:          ctx.String(InterpreterImplFlag.Name),
+		only_successful:  ctx.Bool(OnlySuccessfulFlag.Name),
+		use_in_memory_db: ctx.Bool(UseInMemoryStateDbFlag.Name),
 	}
 
 	task := func(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {

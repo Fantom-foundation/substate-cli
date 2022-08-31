@@ -17,9 +17,8 @@ type StateDB interface {
 	// Also, some extra functionality must be provided to the replay tool.
 	Prepare(common.Hash, int)
 	Finalise(bool)
-	IntermediateRoot(deleteEmptyObjects bool)
+	IntermediateRoot(deleteEmptyObjects bool) common.Hash
 	GetLogs(common.Hash, common.Hash) []*types.Log
-	GetEffects() substate.SubstateAlloc
 	GetSubstatePostAlloc() substate.SubstateAlloc
 }
 
@@ -298,7 +297,6 @@ func (db *inMemoryStateDB) AddPreimage(common.Hash, []byte) {
 }
 
 func (db *inMemoryStateDB) ForEachStorage(common.Address, func(common.Hash, common.Hash) bool) error {
-	// ignored
 	panic("not implemented")
 	return nil
 }
@@ -310,8 +308,9 @@ func (db *inMemoryStateDB) Prepare(common.Hash, int) {
 func (db *inMemoryStateDB) Finalise(bool) {
 	// nothing to do ...
 }
-func (db *inMemoryStateDB) IntermediateRoot(deleteEmptyObjects bool) {
-	// nothing to do ...
+func (db *inMemoryStateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
+	panic("not implemented")
+	return common.Hash{}
 }
 
 func collectLogs(s *snapshot) []*types.Log {
