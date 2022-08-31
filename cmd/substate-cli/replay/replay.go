@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime/pprof"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/core/vm/lfvm"
 	_ "github.com/ethereum/go-ethereum/core/vm/lfvm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -422,6 +424,9 @@ func replayAction(ctx *cli.Context) error {
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
 		vm.PrintStatistics()
+	}
+	if strings.HasSuffix(ctx.String(InterpreterImplFlag.Name), "-stats") {
+		lfvm.PrintCollectedInstructionStatistics()
 	}
 	return err
 }
