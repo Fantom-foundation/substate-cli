@@ -137,7 +137,7 @@ PNG_NAME=${OUTDIR}/storage_transaction_inout_substate_timeline.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT * FROM transaction_storage_updates ORDER BY output_update_bytes ASC;
+SELECT block_number,tx_number, block_timestamp, input_update_bytes, output_update_bytes, storage_update_bytes FROM transaction_storage_updates WHERE input_update_bytes > 0 and output_update_bytes > 0 ORDER BY output_update_bytes ASC;
 "
 gnuplot <<< "
 set terminal pngcairo size 800,600
@@ -163,7 +163,7 @@ set autoscale xfix
 set key box left top
 plot \"${TMP_FILE}\" using (\$3):6 with points pointtype 7 title 'input substate'
 "
-PNG_NAME=${OUTDIR}/storage_block_inout_substate.png
+PNG_NAME=${OUTDIR}/storage_transaction_inout_substate.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 gnuplot <<< "
 set terminal pngcairo size 800,600

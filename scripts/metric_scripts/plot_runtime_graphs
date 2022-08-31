@@ -52,7 +52,24 @@ runsql ${DATABASE} ".mode tabs
 SELECT total_runtime/1.0e9 FROM summary_contract_runtime ORDER BY total_runtime ASC;
 "
 gnuplot <<< "
-set terminal pngcairo
+set terminal pngcairo size 800, 300 font \",8\"
+set output \"${PNG_NAME}\"
+set logscale y
+set xlabel \"Smart contracts\"
+set ylabel \"Total Runtime (sec.)\"
+set autoscale xfix
+plot \"${TMP_FILE}\" notitle
+"
+rm -f -- "$TMP_FILE"
+
+PNG_NAME=${OUTDIR}/smartcontract_total_runtime_recorded.png
+echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
+runsql ${DATABASE} ".mode tabs
+.output ${TMP_FILE}
+SELECT total_runtime/1.0e9 FROM summary_recorded_contract_runtime ORDER BY total_runtime ASC;
+"
+gnuplot <<< "
+set terminal pngcairo size 800, 300 font \",8\"
 set output \"${PNG_NAME}\"
 set logscale y
 set xlabel \"Smart contracts\"
@@ -118,11 +135,52 @@ set xlabel \"Smart contracts\"
 set ylabel \"Total Runtime (sec.)\"
 set y2label \"Invocations (#)\"
 set autoscale xfix
-plot \"${TMP_FILE}\" using 1 title \"runtime\", \"${TMP_FILE}\" using 2 title \"invocations\" axis x1y2
+plot \"${TMP_FILE}\" using 2 title \"invocations\" axis x1y2, \"${TMP_FILE}\" using 1 title \"runtime\"
 "
 rm -f -- "$TMP_FILE"
 
-PNG_NAME=${OUTDIR}/smartcontract_runtime_record_relay.png
+PNG_NAME=${OUTDIR}/smartcontract_combined_runtime_record.png
+echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
+runsql ${DATABASE} ".mode tabs
+.output ${TMP_FILE}
+SELECT total_runtime/1.0e9, invocations FROM summary_recorded_contract_runtime ORDER BY total_runtime ASC;
+"
+gnuplot <<< "
+set terminal pngcairo
+set output \"${PNG_NAME}\"
+set logscale y
+set logscale y2
+set y2tics
+set xlabel \"Smart contracts\"
+set ylabel \"Total Runtime (sec.)\"
+set y2label \"Invocations (#)\"
+set autoscale xfix
+plot \"${TMP_FILE}\" using 2 title \"invocations\" axis x1y2, \"${TMP_FILE}\" using 1 title \"runtime\"
+"
+rm -f -- "$TMP_FILE"
+
+PNG_NAME=${OUTDIR}/smartcontract_runtime_record_replay.png
+echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
+runsql ${DATABASE} ".mode tabs
+.output ${TMP_FILE}
+SELECT rec.total_runtime /1.0e9,
+	rep.total_runtime /1.0e9
+FROM summary_contract_runtime rep, summary_recorded_contract_runtime rec
+WHERE rep.contract = rec.contract;"
+gnuplot <<< "
+set terminal pngcairo
+set output \"${PNG_NAME}\"
+set logscale x
+set xlabel \"Record runtime (sec.)\"
+set logscale y
+set ylabel \"Replay runtime (sec.)\"
+set autoscale xfix
+set xtics rotate
+plot \"${TMP_FILE}\" using 1:2 notitle, x*tan(45) notitle
+"
+rm -f -- "$TMP_FILE"
+
+PNG_NAME=${OUTDIR}/smartcontract_runtime_speedup.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
@@ -142,3 +200,5 @@ rm -f -- "$TMP_FILE"
 rm -f -- "$TMP_FILE"
 trap - EXIT
 exit
+
+

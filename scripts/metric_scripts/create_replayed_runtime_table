@@ -65,6 +65,16 @@ SELECT
 FROM contract_runtime
 GROUP BY contract;"
 
+runsql ${DATABASE} "DROP TABLE IF EXISTS contract_runtime_aggr;"
+runsql ${DATABASE}  "CREATE TABLE contract_runtime_aggr AS
+SELECT
+	block_number,
+	tx_number,
+	contract,
+	sum(runtime) as runtime
+FROM contract_runtime
+GROUP BY block_number, tx_number, contract;"
+
 # Compute summary if both recordeed and replayed tables exist
 echo "${PROGNAME}: create speed comparison table..."
 HasRecordedTable=`runsql ${DATABASE} "SELECT name FROM sqlite_master WHERE type='table' AND name='recorded_contract_runtime';"`
@@ -74,15 +84,17 @@ if [ -z ${HasRecordedTable} ]; then
 	exit 0
 fi
 
-runsql ${DATABASE} "DROP TABLE IF EXISTS summary_record_replay "
-runsql ${DATABASE} "CREATE TABLE summary_record_replay(block_number INTEGER NOT NULL, tx_number INTEGER NOT NULL, contract TEXT NOT NULL, speedup NUMERIC NOT NULL);"
+runsql ${DATABASE} "DROP TABLE IF EXISTS summary_record_replay;"
+runsql ${DATABASE} "CREATE TABLE summary_record_replay(block_number INTEGER NOT NULL, tx_number INTEGER NOT NULL, contract TEXT NOT NULL, record_runtime NUMERIC NOT NULL, replay_runtime NUMERIC NOT NULL, speedup NUMERIC NOT NULL);"
 runsql ${DATABASE} "INSERT INTO summary_record_replay
 SELECT
 	rec.block_number,
 	rec.tx_number,
 	rec.contract,
+	rec.runtime/1.0e9 as record_runtime,
+	rep.runtime/1.0e9 as replay_runtime,
 	(rec.runtime/1.0e9) / (rep.runtime/1.0e9)
-FROM recorded_contract_runtime rec, contract_runtime rep
+FROM recorded_contract_runtime_aggr rec, contract_runtime_aggr rep
 WHERE rec.block_number = rep.block_number
 	AND rec.tx_number = rep.tx_number
 	AND rec.contract = rep.contract;"

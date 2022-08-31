@@ -44,10 +44,18 @@ echo
 
 # micro profiling
 echo
-echo "Total opcode"
+echo "Total opcode count"
 runsql ${DATABASE} ".headers on
 SELECT SUM(freq) from opcode_frequency;"
 echo
+
+echo "Total opcode runtime"
+runsql ${DATABASE} ".headers on
+SELECT SUM(total_runtime_s) from opcode_runtime;"
+echo
+
+echo "Instruction Freq > 500"
+
 
 # storage
 echo

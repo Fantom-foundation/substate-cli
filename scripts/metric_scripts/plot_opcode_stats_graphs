@@ -32,7 +32,12 @@ PNG_NAME=${OUTDIR}/opcode_freq.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT ROW_NUMBER() OVER (ORDER BY freq desc) AS id, opcode, freq FROM opcode_frequency ORDER BY freq DESC LIMIT 20;
+SELECT ROW_NUMBER() OVER (ORDER BY freq desc) AS id,
+	opcode,
+	freq,
+	ROUND(freq * 100.0 / (SELECT SUM(freq) FROM opcode_frequency),1) AS freq_pct
+FROM opcode_frequency
+ORDER BY freq DESC LIMIT 20;
 "
 gnuplot <<< "
 set terminal pngcairo size 800, 600
@@ -42,7 +47,7 @@ set ylabel \"Count\"
 set style fill solid
 set boxwidth 0.5
 set xtics rotate
-plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle
+plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle, '' using 0:3:4 with labels offset 3, char 1.0 notitle
 "
 rm -f -- "$TMP_FILE"
 
@@ -50,27 +55,79 @@ PNG_NAME=${OUTDIR}/opcode_runtime.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT ROW_NUMBER() OVER (ORDER BY total_runtime_s desc) AS id, opcode, total_runtime_s
+SELECT ROW_NUMBER() OVER (ORDER BY total_runtime_s desc) AS id,
+	opcode,
+	total_runtime_s,
+	ROUND(total_runtime_s * 100.0 / (SELECT SUM(total_runtime_s) FROM opcode_runtime), 1) AS pct
 FROM opcode_runtime
 ORDER BY total_runtime_s DESC LIMIT 20;
 "
 gnuplot <<< "
-set terminal pngcairo size 800, 600
+set terminal pngcairo size 800, 300 font \",8\"
 set output \"${PNG_NAME}\"
 set xlabel \"Opcode\"
 set ylabel \"Time (seconds)\"
 set style fill solid
 set boxwidth 0.5
 set xtics rotate
-plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle
+plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle, '' using 0:3:4 with labels offset 5, char 1.0 notitle
 "
+rm -f -- "$TMP_FILE"
+
+#TODO replace hardcode
+PNG_NAME=${OUTDIR}/opcode_runtime_recorded.png
+echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
+runsql ${DATABASE} ".mode tabs
+.output ${TMP_FILE}
+SELECT ROW_NUMBER() OVER (ORDER BY adjusted_total_runtime_s desc) AS id,
+	tt.opcode,
+	adjusted_total_runtime_s,
+	CASE WHEN tt.opcode = 'SSTORE' THEN adjusted_total_runtime_s * 1.0e9 / freq
+	     WHEN tt.opcode = 'SLOAD' THEN adjusted_total_runtime_s * 1.0e9 / freq
+	     ELSE avg_runtime_ns
+	END AS adjusted_avg_runtime_ns,
+	ROUND(adjusted_total_runtime_s * 100.0 / (SELECT SUM(total_runtime) / 1.0e9 FROM summary_recorded_contract_runtime), 1) AS pct
+FROM (SELECT *,
+	CASE WHEN opcode = 'SSTORE' THEN total_runtime_s + 16891
+	     WHEN opcode = 'SLOAD' THEN total_runtime_s + 61134
+	     ELSE total_runtime_s
+	END AS adjusted_total_runtime_s
+	FROM opcode_runtime) tt,
+	opcode_frequency freq
+WHERE tt.opcode = freq.opcode
+ORDER BY adjusted_total_runtime_s DESC LIMIT 20;
+"
+gnuplot <<< "
+set terminal pngcairo size 800, 300 font \",8\"
+set output \"${PNG_NAME}\"
+set xlabel \"Opcode\"
+set ylabel \"Time (seconds)\"
+set style fill solid
+set boxwidth 0.5
+set xtics rotate
+plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle, '' using 0:3:5 with labels offset 5, char 1.0 notitle
+"
+
+PNG_NAME=${OUTDIR}/opcode_avg_runtime_recorded_sorted_by_total_runtime.png
+echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
+gnuplot <<< "
+set terminal pngcairo size 800, 300 font \",8\"
+set output \"${PNG_NAME}\"
+set xlabel \"Opcode\"
+set ylabel \"Time (ns)\"
+set style fill solid
+set boxwidth 0.5
+set xtics rotate
+plot \"${TMP_FILE}\" using 1:4:xtic(2) with boxes notitle
+"
+
 rm -f -- "$TMP_FILE"
 
 PNG_NAME=${OUTDIR}/opcode_avg_runtime.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT ROW_NUMBER() OVER (ORDER BY avg_runtime_ns) AS id,
+SELECT ROW_NUMBER() OVER (ORDER BY avg_runtime_ns DESC) AS id,
 	opcode,
 	avg_runtime_ns
 FROM opcode_runtime
@@ -100,7 +157,7 @@ FROM opcode_runtime
 ORDER BY total_runtime_s DESC LIMIT 20;
 "
 gnuplot <<< "
-set terminal pngcairo size 800, 600
+set terminal pngcairo size 800, 300 font \",8\"
 set output \"${PNG_NAME}\"
 set xlabel \"Opcode\"
 set ylabel \"Time (ns)\"
@@ -111,43 +168,24 @@ plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle
 "
 rm -f -- "$TMP_FILE"
 
-PNG_NAME=${OUTDIR}/opcode_runtime_no_calls.png
-echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
-runsql ${DATABASE} ".mode tabs
-.output ${TMP_FILE}
-SELECT ROW_NUMBER() OVER (ORDER BY total_runtime_s desc) AS id, opcode, total_runtime_s
-FROM opcode_runtime
-WHERE opcode NOT IN ('CALL', 'STATICCALL', 'DELEGATECALL')
-ORDER BY total_runtime_s DESC LIMIT 20;
-"
-gnuplot <<< "
-set terminal pngcairo size 800, 600
-set output \"${PNG_NAME}\"
-set xlabel \"Opcode\"
-set ylabel \"Time (seconds)\"
-set style fill solid
-set boxwidth 0.5
-set xtics rotate
-plot \"${TMP_FILE}\" using 1:3:xtic(2) with boxes notitle
-"
-rm -f -- "$TMP_FILE"
-
-
 PNG_NAME=${OUTDIR}/instruction_frequency_top20.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT execution_freq, instructions FROM instruction_frequency ORDER BY instructions DESC LIMIT 20;
+SELECT execution_freq, 
+	instructions, 
+	ROUND(instructions * 100.0/(select sum(instructions) from instruction_frequency),1) as pct 
+FROM instruction_frequency ORDER BY instructions DESC LIMIT 20;
 "
 gnuplot <<< "
 set terminal pngcairo size 800, 600
 set output \"${PNG_NAME}\"
 set xlabel \"Number of times instruction executed\"
-set ylabel \"Instruction count\"
+set ylabel \"Smart Contracts\"
 set style fill solid
 set boxwidth 0.5
 set xtics rotate
-plot \"${TMP_FILE}\" using 2:xtic(1) with boxes notitle
+plot \"${TMP_FILE}\" using 2:xtic(1) with boxes notitle, '' using 0:2:3 with labels offset 0, char 0.5 notitle
 "
 rm -f -- "$TMP_FILE"
 
@@ -169,21 +207,29 @@ plot \"${TMP_FILE}\" using 2:xtic(1) with boxes notitle
 "
 rm -f -- "$TMP_FILE"
 
-PNG_NAME=${OUTDIR}/step_length_frequency.png
+PNG_NAME=${OUTDIR}/step_length_frequency_cdf.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT instruction_length, contracts FROM step_length_frequency ORDER BY contracts DESC;
+SELECT instruction_length, 
+	SUM (contract_pct) OVER (ORDER BY instruction_length) AS cummulative_contract_pct
+FROM (SELECT 
+		instruction_length, 
+		contracts * 100.0 / (select sum(contracts) FROM step_length_frequency) AS contract_pct
+	FROM step_length_frequency 
+	ORDER BY instruction_length);
 "
 gnuplot <<< "
 set terminal pngcairo size 800, 600
 set output \"${PNG_NAME}\"
 set xlabel \"Number of instructions executed\"
-set ylabel \"Contract count\"
-set style fill solid
-set boxwidth 0.5
-set xtics rotate
-plot \"${TMP_FILE}\" using 1:2 with boxes notitle
+set logscale x
+set xtics nomirror
+set ylabel \"Percentage of smart contracts\"
+set yrange [0:100]
+set mxtics 5
+set grid y my
+plot \"${TMP_FILE}\" using 1:2 with lines notitle
 "
 rm -f -- "$TMP_FILE"
 
@@ -191,7 +237,10 @@ PNG_NAME=${OUTDIR}/step_length_frequency_top20.png
 echo "${PROGNAME}: produce plot ${PNG_NAME} ..."
 runsql ${DATABASE} ".mode tabs
 .output ${TMP_FILE}
-SELECT instruction_length, contracts FROM step_length_frequency ORDER BY contracts DESC LIMIT 20;
+SELECT instruction_length,
+	contracts,
+	ROUND(contracts * 100.0 / (SELECT SUM(contracts) FROM step_length_frequency), 1)
+FROM step_length_frequency ORDER BY contracts DESC LIMIT 20;
 "
 gnuplot <<< "
 set terminal pngcairo size 800, 600
@@ -201,7 +250,7 @@ set ylabel \"Contract count\"
 set style fill solid
 set boxwidth 0.5
 set xtics rotate
-plot \"${TMP_FILE}\" using 2:xtic(1) with boxes notitle
+plot \"${TMP_FILE}\" using 2:xtic(1) with boxes notitle, '' using 0:2:3 with labels offset 0, char 0.5 notitle
 "
 rm -f -- "$TMP_FILE"
 
