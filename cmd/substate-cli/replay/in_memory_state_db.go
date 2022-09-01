@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/substate"
 )
 
@@ -128,11 +127,11 @@ func (db *inMemoryStateDB) GetNonce(addr common.Address) uint64 {
 func (db *inMemoryStateDB) SetNonce(addr common.Address, value uint64) {
 	db.state.touched[addr] = 0
 	db.state.nonces[addr] = value
+	debug("Updated nonce of %v\n", addr)
 }
 
 func (db *inMemoryStateDB) GetCodeHash(addr common.Address) common.Hash {
 	return getHash(addr, db.GetCode(addr))
-	return crypto.Keccak256Hash(db.GetCode(addr))
 }
 
 func (db *inMemoryStateDB) GetCode(addr common.Address) []byte {
@@ -385,5 +384,13 @@ func (db *inMemoryStateDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 			entry.Storage[key] = value
 		}
 	}
+
+	for key := range res {
+		if db.HasSuicided(key) {
+			delete(res, key)
+			continue
+		}
+	}
+
 	return res
 }
