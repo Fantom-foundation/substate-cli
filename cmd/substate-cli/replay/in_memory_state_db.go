@@ -74,8 +74,7 @@ func makeSnapshot(parent *snapshot, id int) *snapshot {
 }
 
 func (db *inMemoryStateDB) CreateAccount(addr common.Address) {
-	//fmt.Printf("Creating account %v\n", addr)
-	//db.state.touched[addr] = 0
+	// ignored
 }
 
 func (db *inMemoryStateDB) SubBalance(addr common.Address, value *big.Int) {
@@ -84,7 +83,6 @@ func (db *inMemoryStateDB) SubBalance(addr common.Address, value *big.Int) {
 	}
 	db.state.touched[addr] = 0
 	db.state.balances[addr] = new(big.Int).Sub(db.GetBalance(addr), value)
-	//fmt.Printf("Decreased balance of %v by %v to %v\n", addr, value, db.state.balances[addr])
 }
 
 func (db *inMemoryStateDB) AddBalance(addr common.Address, value *big.Int) {
@@ -93,7 +91,6 @@ func (db *inMemoryStateDB) AddBalance(addr common.Address, value *big.Int) {
 	}
 	db.state.touched[addr] = 0
 	db.state.balances[addr] = new(big.Int).Add(db.GetBalance(addr), value)
-	//fmt.Printf("Increased balance of %v by %v to %v\n", addr, value, db.state.balances[addr])
 }
 
 func (db *inMemoryStateDB) GetBalance(addr common.Address) *big.Int {
@@ -127,7 +124,6 @@ func (db *inMemoryStateDB) GetNonce(addr common.Address) uint64 {
 func (db *inMemoryStateDB) SetNonce(addr common.Address, value uint64) {
 	db.state.touched[addr] = 0
 	db.state.nonces[addr] = value
-	debug("Updated nonce of %v\n", addr)
 }
 
 func (db *inMemoryStateDB) GetCodeHash(addr common.Address) common.Hash {
@@ -193,19 +189,15 @@ func (db *inMemoryStateDB) GetState(addr common.Address, key common.Hash) common
 }
 
 func (db *inMemoryStateDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
-	//fmt.Printf("SSTORE: %v %v - %v\n", addr, key, value)
 	db.state.touched[addr] = 0
 	db.state.storage[slot{addr, key}] = value
 }
 
 func (db *inMemoryStateDB) Suicide(addr common.Address) bool {
-	//fmt.Printf("Suicide called for %v\n", addr)
-	db.state.touched[addr] = 0
 	db.state.suicided[addr] = 0
 	return true
 }
 func (db *inMemoryStateDB) HasSuicided(addr common.Address) bool {
-	//fmt.Printf("Has suicided called for %v\n", addr)
 	for state := db.state; state != nil; state = state.parent {
 		_, exists := state.suicided[addr]
 		if exists {
@@ -369,6 +361,7 @@ func (db *inMemoryStateDB) GetEffects() substate.SubstateAlloc {
 func (db *inMemoryStateDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 	// Use the pre-alloc ...
 	res := *db.alloc
+
 	// ... and extend with effects
 	for key, value := range db.GetEffects() {
 		entry, exists := res[key]
