@@ -195,6 +195,7 @@ func (db *inMemoryStateDB) SetState(addr common.Address, key common.Hash, value 
 
 func (db *inMemoryStateDB) Suicide(addr common.Address) bool {
 	db.state.suicided[addr] = 0
+	db.state.balances[addr] = new(big.Int) // Apparently when you die all your money is gone.
 	return true
 }
 func (db *inMemoryStateDB) HasSuicided(addr common.Address) bool {
