@@ -2,7 +2,6 @@ package replay
 
 import (
 	"context"
-	"encoding/json"
 	"bytes"
 	"fmt"
 	"math/big"
