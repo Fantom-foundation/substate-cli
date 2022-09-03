@@ -1,14 +1,15 @@
 package replay
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/Fantom-foundation/go-opera/evmcore"
 	"github.com/Fantom-foundation/go-opera/opera"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -22,23 +23,24 @@ var (
 	gitCommit = "" // Git SHA1 commit hash of the release (set via linker flags)
 	gitDate   = ""
 )
+
 // chain id
 var chainID int
 var ChainIDFlag = cli.IntFlag{
-		Name:  "chainid",
-		Usage: "ChainID for replayer",
-		Value: 250,
-	}
+	Name:  "chainid",
+	Usage: "ChainID for replayer",
+	Value: 250,
+}
 
 var ProfileEVMCallFlag = cli.BoolFlag{
-		Name:  "profiling-call",
-		Usage: "enable profiling for EVM call",
-	}
+	Name:  "profiling-call",
+	Usage: "enable profiling for EVM call",
+}
 
 var ProfileEVMOpCodeFlag = cli.BoolFlag{
-		Name:  "profiling-opcode",
-		Usage: "enable profiling for EVM opcodes",
-	}
+	Name:  "profiling-opcode",
+	Usage: "enable profiling for EVM opcodes",
+}
 
 // record-replay: substate-cli replay command
 var ReplayCommand = cli.Command{
@@ -216,10 +218,16 @@ func replayAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli replay command requires exactly 2 arguments")
 	}
 
+	dcctx, cancel := context.WithCancel(context.Background())
+	ch := make(chan struct{})
+	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
+		go vm.DataCollector(dcctx, ch)
+	}
+
 	chainID = ctx.Int(ChainIDFlag.Name)
-	fmt.Printf("chain-id: %v\n",chainID)
+	fmt.Printf("chain-id: %v\n", chainID)
 	fmt.Printf("git-date: %v\n", gitDate)
-	fmt.Printf("git-commit: %v\n",gitCommit)
+	fmt.Printf("git-commit: %v\n", gitCommit)
 
 	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
 	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)
@@ -234,10 +242,10 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	if ctx.Bool(ProfileEVMCallFlag.Name) {
-		vm.ProfileEVMCall = true;
+		vm.ProfileEVMCall = true
 	}
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
-		vm.ProfileEVMOpCode = true;
+		vm.ProfileEVMOpCode = true
 	}
 
 	substate.SetSubstateFlags(ctx)
@@ -248,6 +256,8 @@ func replayAction(ctx *cli.Context) error {
 	err = taskPool.Execute()
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
+		cancel() // stop data collector
+		<-ch     // wait for data collector to finish
 		vm.PrintStatistics()
 	}
 	return err
