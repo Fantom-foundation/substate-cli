@@ -3,9 +3,15 @@ package replay
 import (
 	"context"
 	"encoding/json"
+	"bytes"
 	"fmt"
 	"math/big"
+	"os"
+	"runtime/pprof"
 	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/Fantom-foundation/go-opera/evmcore"
 	"github.com/Fantom-foundation/go-opera/opera"
@@ -13,6 +19,8 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/core/vm/lfvm"
+	_ "github.com/ethereum/go-ethereum/core/vm/lfvm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
@@ -42,6 +50,26 @@ var ProfileEVMOpCodeFlag = cli.BoolFlag{
 	Usage: "enable profiling for EVM opcodes",
 }
 
+var OnlySuccessfulFlag = cli.BoolFlag{
+	Name:  "only-successful",
+	Usage: "only runs transactions that have been successful",
+}
+
+var InterpreterImplFlag = cli.StringFlag{
+	Name:  "interpreter",
+	Usage: "select the interpreter version to be used",
+}
+
+var CpuProfilingFlag = cli.StringFlag{
+	Name:  "cpuprofile",
+	Usage: "the file name where to write a CPU profile of the evaluation step to",
+}
+
+var UseInMemoryStateDbFlag = cli.BoolFlag{
+	Name:  "faststatedb",
+	Usage: "enables a faster, yet still experimental StateDB implementation",
+}
+
 // record-replay: substate-cli replay command
 var ReplayCommand = cli.Command{
 	Action:    replayAction,
@@ -57,6 +85,10 @@ var ReplayCommand = cli.Command{
 		ChainIDFlag,
 		ProfileEVMCallFlag,
 		ProfileEVMOpCodeFlag,
+		InterpreterImplFlag,
+		OnlySuccessfulFlag,
+		CpuProfilingFlag,
+		UseInMemoryStateDbFlag,
 	},
 	Description: `
 The substate-cli replay command requires two arguments:
@@ -66,8 +98,33 @@ The substate-cli replay command requires two arguments:
 last block of the inclusive range of blocks to replay transactions.`,
 }
 
+var vm_duration time.Duration
+
+func resetVmDuration() {
+	atomic.StoreInt64((*int64)(&vm_duration), 0)
+}
+
+func addVmDuration(delta time.Duration) {
+	atomic.AddInt64((*int64)(&vm_duration), (int64)(delta))
+}
+
+func getVmDuration() time.Duration {
+	return time.Duration(atomic.LoadInt64((*int64)(&vm_duration)))
+}
+
+type ReplayConfig struct {
+	vm_impl          string
+	only_successful  bool
+	use_in_memory_db bool
+}
+
 // replayTask replays a transaction substate
-func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
+func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
+
+	// If requested, skip failed transactions.
+	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
+		return nil
+	}
 
 	inputAlloc := recording.InputAlloc
 	inputEnv := recording.Env
@@ -79,7 +136,6 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 	var (
 		vmConfig    vm.Config
 		chainConfig *params.ChainConfig
-		getTracerFn func(txIndex int, txHash common.Hash) (tracer vm.Tracer, err error)
 	)
 
 	vmConfig = opera.DefaultVMConfig
@@ -89,10 +145,6 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 	chainConfig.ChainID = big.NewInt(int64(chainID))
 	chainConfig.LondonBlock = new(big.Int).SetUint64(37534833)
 	chainConfig.BerlinBlock = new(big.Int).SetUint64(37455223)
-
-	getTracerFn = func(txIndex int, txHash common.Hash) (tracer vm.Tracer, err error) {
-		return nil, nil
-	}
 
 	var hashError error
 	getHash := func(num uint64) common.Hash {
@@ -107,9 +159,15 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 		return h
 	}
 
+	var statedb StateDB
+	if config.use_in_memory_db {
+		statedb = MakeInMemoryStateDB(&inputAlloc)
+	} else {
+		statedb = MakeOffTheChainStateDB(inputAlloc)
+	}
+
 	// Apply Message
 	var (
-		statedb   = MakeOffTheChainStateDB(inputAlloc)
 		gaspool   = new(evmcore.GasPool)
 		blockHash = common.Hash{0x01}
 		txHash    = common.Hash{0x02}
@@ -134,12 +192,9 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 
 	msg := inputMessage.AsMessage()
 
-	tracer, err := getTracerFn(txIndex, txHash)
-	if err != nil {
-		return err
-	}
-	vmConfig.Tracer = tracer
-	vmConfig.Debug = (tracer != nil)
+	vmConfig.Tracer = nil
+	vmConfig.Debug = false
+	vmConfig.InterpreterImpl = config.vm_impl
 	statedb.Prepare(txHash, txIndex)
 
 	txCtx := evmcore.NewEVMTxContext(msg)
@@ -147,7 +202,9 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 	evm := vm.NewEVM(blockCtx, txCtx, statedb, chainConfig, vmConfig)
 
 	snapshot := statedb.Snapshot()
+	start := time.Now()
 	msgResult, err := evmcore.ApplyMessage(evm, msg, gaspool)
+	addVmDuration(time.Since(start))
 
 	if err != nil {
 		statedb.RevertToSnapshot(snapshot)
@@ -177,7 +234,7 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 	}
 	evmResult.GasUsed = msgResult.UsedGas
 
-	evmAlloc := statedb.SubstatePostAlloc
+	evmAlloc := statedb.GetSubstatePostAlloc()
 
 	r := outputResult.Equal(evmResult)
 	a := outputAlloc.Equal(evmAlloc)
@@ -185,29 +242,123 @@ func replayTask(block uint64, tx int, recording *substate.Substate, taskPool *su
 		fmt.Printf("block: %v Transaction: %v\n", block, tx)
 		if !r {
 			fmt.Printf("inconsistent output: result\n")
+			printResultDiffSummary(outputResult, evmResult)
 		}
 		if !a {
 			fmt.Printf("inconsistent output: alloc\n")
+			printAllocationDiffSummary(&outputAlloc, &evmAlloc)
 		}
-		var jbytes []byte
-		jbytes, _ = json.MarshalIndent(inputAlloc, "", " ")
-		fmt.Printf("Recorded input substate:\n%s\n", jbytes)
-		jbytes, _ = json.MarshalIndent(inputEnv, "", " ")
-		fmt.Printf("Recorded input environmnet:\n%s\n", jbytes)
-		jbytes, _ = json.MarshalIndent(inputMessage, "", " ")
-		fmt.Printf("Recorded input message:\n%s\n", jbytes)
-		jbytes, _ = json.MarshalIndent(outputAlloc, "", " ")
-		fmt.Printf("Recorded output substate:\n%s\n", jbytes)
-		jbytes, _ = json.MarshalIndent(evmAlloc, "", " ")
-		fmt.Printf("Replayed output substate:\n%s\n", jbytes)
-		jbytes, _ = json.MarshalIndent(outputResult, "", " ")
-		fmt.Printf("Recorded output result:\n%s\n", jbytes)
-		jbytes, _ = json.MarshalIndent(evmResult, "", " ")
-		fmt.Printf("Replayed output result:\n%s\n", jbytes)
 		return fmt.Errorf("inconsistent output")
 	}
 
 	return nil
+}
+
+func printIfDifferent[T comparable](label string, want, have T) bool {
+	if want != have {
+		fmt.Printf("  Different %s:\n", label)
+		fmt.Printf("    want: %v\n", want)
+		fmt.Printf("    have: %v\n", have)
+		return true
+	}
+	return false
+}
+
+func printIfDifferentBytes(label string, want, have []byte) bool {
+	if !bytes.Equal(want, have) {
+		fmt.Printf("  Different %s:\n", label)
+		fmt.Printf("    want: %v\n", want)
+		fmt.Printf("    have: %v\n", have)
+		return true
+	}
+	return false
+}
+
+func printIfDifferentBigInt(label string, want, have *big.Int) bool {
+	if want == nil && have == nil {
+		return false
+	}
+	if want == nil || have == nil || want.Cmp(have) != 0 {
+		fmt.Printf("  Different %s:\n", label)
+		fmt.Printf("    want: %v\n", want)
+		fmt.Printf("    have: %v\n", have)
+		return true
+	}
+	return false
+}
+
+func printResultDiffSummary(want, have *substate.SubstateResult) {
+	printIfDifferent("status", want.Status, have.Status)
+	printIfDifferent("contract address", want.ContractAddress, have.ContractAddress)
+	printIfDifferent("gas usage", want.GasUsed, have.GasUsed)
+	printIfDifferent("log bloom filter", want.Bloom, have.Bloom)
+	if !printIfDifferent("log size", len(want.Logs), len(have.Logs)) {
+		for i := range want.Logs {
+			printLogDiffSummary(fmt.Sprintf("log[%d]", i), want.Logs[i], have.Logs[i])
+		}
+	}
+}
+
+func printLogDiffSummary(label string, want, have *types.Log) {
+	printIfDifferent(fmt.Sprintf("%s.address", label), want.Address, have.Address)
+	if !printIfDifferent(fmt.Sprintf("%s.Topics size", label), len(want.Topics), len(have.Topics)) {
+		for i := range want.Topics {
+			printIfDifferent(fmt.Sprintf("%s.Topics[%d]", label, i), want.Topics[i], have.Topics[i])
+		}
+	}
+	printIfDifferentBytes(fmt.Sprintf("%s.data", label), want.Data, have.Data)
+}
+
+func printAllocationDiffSummary(want, have *substate.SubstateAlloc) {
+	printIfDifferent("substate alloc size", len(*want), len(*have))
+	for key := range *want {
+		_, present := (*have)[key]
+		if !present {
+			fmt.Printf("    missing key=%v\n", key)
+		}
+	}
+
+	for key := range *have {
+		_, present := (*want)[key]
+		if !present {
+			fmt.Printf("    extra key=%v\n", key)
+		}
+	}
+
+	for key, is := range *have {
+		should, present := (*want)[key]
+		if present {
+			printAccountDiffSummary(fmt.Sprintf("key=%v:", key), should, is)
+		}
+	}
+}
+
+func printAccountDiffSummary(label string, want, have *substate.SubstateAccount) {
+	printIfDifferent(fmt.Sprintf("%s.Nonce", label), want.Nonce, have.Nonce)
+	printIfDifferentBigInt(fmt.Sprintf("%s.Balance", label), want.Balance, have.Balance)
+	printIfDifferentBytes(fmt.Sprintf("%s.Code", label), want.Code, have.Code)
+
+	printIfDifferent(fmt.Sprintf("len(%s.Storage)", label), len(want.Storage), len(have.Storage))
+	for key := range want.Storage {
+		_, present := have.Storage[key]
+		if !present {
+			fmt.Printf("    %s.Storage misses key %v\n", label, key)
+		}
+	}
+
+	for key := range have.Storage {
+		_, present := want.Storage[key]
+		if !present {
+			fmt.Printf("    %s.Storage has extra key %v\n", label, key)
+		}
+	}
+
+	for key, is := range have.Storage {
+		should, present := want.Storage[key]
+		if present {
+			printIfDifferent(fmt.Sprintf("%s.Storage[%v]", label, key), should, is)
+		}
+	}
 }
 
 // record-replay: func replayAction for replay command
@@ -252,13 +403,40 @@ func replayAction(ctx *cli.Context) error {
 	substate.OpenSubstateDBReadOnly()
 	defer substate.CloseSubstateDB()
 
-	taskPool := substate.NewSubstateTaskPool("substate-cli replay", replayTask, uint64(first), uint64(last), ctx)
+	// Start CPU profiling if requested.
+	profile_file_name := ctx.String(CpuProfilingFlag.Name)
+	if profile_file_name != "" {
+		f, err := os.Create(profile_file_name)
+		if err != nil {
+			return err
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	var config = ReplayConfig{
+		vm_impl:          ctx.String(InterpreterImplFlag.Name),
+		only_successful:  ctx.Bool(OnlySuccessfulFlag.Name),
+		use_in_memory_db: ctx.Bool(UseInMemoryStateDbFlag.Name),
+	}
+
+	task := func(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
+		return replayTask(config, block, tx, recording, taskPool)
+	}
+
+	resetVmDuration()
+	taskPool := substate.NewSubstateTaskPool("substate-cli replay", task, uint64(first), uint64(last), ctx)
 	err = taskPool.Execute()
+
+	fmt.Printf("substate-cli replay: net VM time: %v\n", getVmDuration())
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
 		cancel() // stop data collector
 		<-ch     // wait for data collector to finish
 		vm.PrintStatistics()
+	}
+	if strings.HasSuffix(ctx.String(InterpreterImplFlag.Name), "-stats") {
+		lfvm.PrintCollectedInstructionStatistics()
 	}
 	return err
 }

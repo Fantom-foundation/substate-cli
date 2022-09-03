@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Fantom-foundation/go-opera/flags"
 	"github.com/Fantom-foundation/substate-cli/cmd/substate-cli/db"
 	"github.com/Fantom-foundation/substate-cli/cmd/substate-cli/replay"
-	"github.com/Fantom-foundation/go-opera/flags"
 	"github.com/ethereum/go-ethereum/substate"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -38,9 +38,12 @@ func init() {
 		replay.GetCodeCommand,
 		replay.GetCodeSizeCommand,
 		replay.SubstateDumpCommand,
+		replay.GetAddressStatsCommand,
+		replay.GetKeyStatsCommand,
+		replay.GetLocationStatsCommand,
 		dbCommand,
 	}
-	cli.CommandHelpTemplate = flags.CommandHelpTemplate 
+	cli.CommandHelpTemplate = flags.CommandHelpTemplate
 }
 
 func main() {

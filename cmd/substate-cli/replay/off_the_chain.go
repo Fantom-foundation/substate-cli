@@ -3,10 +3,12 @@ package replay
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/substate"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -95,11 +97,35 @@ func NewOffTheChainStateDB() *state.StateDB {
 	return statedb
 }
 
+type code_key struct {
+	addr   common.Address
+	length int
+}
+
+var code_hashes_lock = sync.Mutex{}
+var code_hashes = map[code_key]common.Hash{}
+
+func getHash(addr common.Address, code []byte) common.Hash {
+	key := code_key{addr, len(code)}
+	code_hashes_lock.Lock()
+	res, exists := code_hashes[key]
+	code_hashes_lock.Unlock()
+	if exists {
+		return res
+	}
+	res = crypto.Keccak256Hash(code)
+	code_hashes_lock.Lock()
+	code_hashes[key] = res
+	code_hashes_lock.Unlock()
+	return res
+}
+
 // MakeOffTheChainStateDB returns an in-memory *state.StateDB initialized with alloc
 func MakeOffTheChainStateDB(alloc substate.SubstateAlloc) *state.StateDB {
 	statedb := NewOffTheChainStateDB()
 	for addr, a := range alloc {
-		statedb.SetCode(addr, a.Code)
+		statedb.SetPrehashedCode(addr, getHash(addr, a.Code), a.Code)
+		//statedb.SetCode(addr, a.Code)
 		statedb.SetNonce(addr, a.Nonce)
 		statedb.SetBalance(addr, a.Balance)
 		// DON'T USE SetStorage because it makes REVERT and dirtyStorage unavailble
