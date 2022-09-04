@@ -1,8 +1,8 @@
 package replay
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"fmt"
 	"math/big"
 	"os"
@@ -362,14 +362,14 @@ func printAccountDiffSummary(label string, want, have *substate.SubstateAccount)
 
 // data collection execution context
 type DataCollectorContext struct {
-	stats *vm.VmMicroData
-	ctx context.Context
+	stats  *vm.VmMicroData
+	ctx    context.Context
 	cancel context.CancelFunc
-	ch chan struct{}
+	ch     chan struct{}
 }
 
 // create new execution context for a data collector
-func NewDataCollectorContext() *DataCollectorContext { 
+func NewDataCollectorContext() *DataCollectorContext {
 	dcc := new(DataCollectorContext)
 	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
 	dcc.ch = make(chan struct{})
@@ -386,9 +386,9 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	// spawn contexts for data collector workers
-	var dcc [5] *DataCollectorContext
+	var dcc [5]*DataCollectorContext
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
-		for i:=0; i<5; i++ {
+		for i := 0; i < 5; i++ {
 			dcc[i] = NewDataCollectorContext()
 			go vm.DataCollector(i, dcc[i].ctx, dcc[i].ch, dcc[i].stats)
 		}
@@ -451,18 +451,18 @@ func replayAction(ctx *cli.Context) error {
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
 		// cancel collectors
-		for i:=0; i<5; i++ {
+		for i := 0; i < 5; i++ {
 			(dcc[i].cancel)() // stop data collector
 			<-(dcc[i].ch)     // wait for data collector to finish
 		}
 
 		// merge all stats from collectors
 		var stats = vm.NewVmMicroData()
-		for i:=0; i<5; i++ {
+		for i := 0; i < 5; i++ {
 			stats.Merge(dcc[i].stats)
 		}
 		stats.PrintStatistics()
-		
+
 	}
 	if strings.HasSuffix(ctx.String(InterpreterImplFlag.Name), "-stats") {
 		lfvm.PrintCollectedInstructionStatistics()
