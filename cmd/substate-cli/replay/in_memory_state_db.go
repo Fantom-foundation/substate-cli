@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/substate"
 )
 
@@ -45,14 +44,16 @@ type snapshot struct {
 	parent *snapshot
 	id     int
 
-	touched  map[common.Address]int // Set of referenced accounts
-	balances map[common.Address]*big.Int
-	nonces   map[common.Address]uint64
-	codes    map[common.Address][]byte
-	suicided map[common.Address]int // Set of destructed accounts
-	storage  map[slot]common.Hash
-	logs     []*types.Log
-	refund   uint64
+	touched           map[common.Address]int // Set of referenced accounts
+	balances          map[common.Address]*big.Int
+	nonces            map[common.Address]uint64
+	codes             map[common.Address][]byte
+	suicided          map[common.Address]int // Set of destructed accounts
+	storage           map[slot]common.Hash
+	accessed_accounts map[common.Address]int
+	accessed_slots    map[slot]int
+	logs              []*types.Log
+	refund            uint64
 }
 
 func makeSnapshot(parent *snapshot, id int) *snapshot {
@@ -61,22 +62,23 @@ func makeSnapshot(parent *snapshot, id int) *snapshot {
 		refund = parent.refund
 	}
 	return &snapshot{
-		parent:   parent,
-		id:       id,
-		touched:  map[common.Address]int{},
-		balances: map[common.Address]*big.Int{},
-		nonces:   map[common.Address]uint64{},
-		codes:    map[common.Address][]byte{},
-		suicided: map[common.Address]int{},
-		storage:  map[slot]common.Hash{},
-		logs:     make([]*types.Log, 0),
-		refund:   refund,
+		parent:            parent,
+		id:                id,
+		touched:           map[common.Address]int{},
+		balances:          map[common.Address]*big.Int{},
+		nonces:            map[common.Address]uint64{},
+		codes:             map[common.Address][]byte{},
+		suicided:          map[common.Address]int{},
+		storage:           map[slot]common.Hash{},
+		accessed_accounts: map[common.Address]int{},
+		accessed_slots:    map[slot]int{},
+		logs:              make([]*types.Log, 0),
+		refund:            refund,
 	}
 }
 
 func (db *inMemoryStateDB) CreateAccount(addr common.Address) {
-	//fmt.Printf("Creating account %v\n", addr)
-	//db.state.touched[addr] = 0
+	// ignored
 }
 
 func (db *inMemoryStateDB) SubBalance(addr common.Address, value *big.Int) {
@@ -85,7 +87,6 @@ func (db *inMemoryStateDB) SubBalance(addr common.Address, value *big.Int) {
 	}
 	db.state.touched[addr] = 0
 	db.state.balances[addr] = new(big.Int).Sub(db.GetBalance(addr), value)
-	//fmt.Printf("Decreased balance of %v by %v to %v\n", addr, value, db.state.balances[addr])
 }
 
 func (db *inMemoryStateDB) AddBalance(addr common.Address, value *big.Int) {
@@ -94,7 +95,6 @@ func (db *inMemoryStateDB) AddBalance(addr common.Address, value *big.Int) {
 	}
 	db.state.touched[addr] = 0
 	db.state.balances[addr] = new(big.Int).Add(db.GetBalance(addr), value)
-	//fmt.Printf("Increased balance of %v by %v to %v\n", addr, value, db.state.balances[addr])
 }
 
 func (db *inMemoryStateDB) GetBalance(addr common.Address) *big.Int {
@@ -132,7 +132,6 @@ func (db *inMemoryStateDB) SetNonce(addr common.Address, value uint64) {
 
 func (db *inMemoryStateDB) GetCodeHash(addr common.Address) common.Hash {
 	return getHash(addr, db.GetCode(addr))
-	return crypto.Keccak256Hash(db.GetCode(addr))
 }
 
 func (db *inMemoryStateDB) GetCode(addr common.Address) []byte {
@@ -194,19 +193,16 @@ func (db *inMemoryStateDB) GetState(addr common.Address, key common.Hash) common
 }
 
 func (db *inMemoryStateDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
-	//fmt.Printf("SSTORE: %v %v - %v\n", addr, key, value)
 	db.state.touched[addr] = 0
 	db.state.storage[slot{addr, key}] = value
 }
 
 func (db *inMemoryStateDB) Suicide(addr common.Address) bool {
-	//fmt.Printf("Suicide called for %v\n", addr)
-	db.state.touched[addr] = 0
 	db.state.suicided[addr] = 0
+	db.state.balances[addr] = new(big.Int) // Apparently when you die all your money is gone.
 	return true
 }
 func (db *inMemoryStateDB) HasSuicided(addr common.Address) bool {
-	//fmt.Printf("Has suicided called for %v\n", addr)
 	for state := db.state; state != nil; state = state.parent {
 		_, exists := state.suicided[addr]
 		if exists {
@@ -237,47 +233,57 @@ func (db *inMemoryStateDB) Empty(addr common.Address) bool {
 }
 
 func (db *inMemoryStateDB) PrepareAccessList(sender common.Address, dest *common.Address, precompiles []common.Address, txAccesses types.AccessList) {
-	// ignored
-	panic("not implemented")
+	db.AddAddressToAccessList(sender)
+	if dest != nil {
+		db.AddAddressToAccessList(*dest)
+		// If it's a create-tx, the destination will be added inside evm.create
+	}
+	for _, addr := range precompiles {
+		db.AddAddressToAccessList(addr)
+	}
+	for _, el := range txAccesses {
+		db.AddAddressToAccessList(el.Address)
+		for _, key := range el.StorageKeys {
+			db.AddSlotToAccessList(el.Address, key)
+		}
+	}
 }
 func (db *inMemoryStateDB) AddressInAccessList(addr common.Address) bool {
-	// ignored
-	panic("not implemented")
+	for state := db.state; state != nil; state = state.parent {
+		if _, present := state.accessed_accounts[addr]; present {
+			return true
+		}
+	}
+	return false
 }
-func (db *inMemoryStateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressOk bool, slotOk bool) {
-	// ignored
-	panic("not implemented")
+func (db *inMemoryStateDB) SlotInAccessList(addr common.Address, key common.Hash) (addressOk bool, slotOk bool) {
+	addressOk = db.AddressInAccessList(addr)
+	id := slot{addr, key}
+	for state := db.state; state != nil; state = state.parent {
+		if _, present := state.accessed_slots[id]; present {
+			slotOk = true
+			return
+		}
+	}
+	return
 }
 
 func (db *inMemoryStateDB) AddAddressToAccessList(addr common.Address) {
-	// ignored
-	panic("not implemented")
+	db.state.accessed_accounts[addr] = 0
 }
 
-func (db *inMemoryStateDB) AddSlotToAccessList(addr common.Address, slot common.Hash) {
-	// ignored
-	panic("not implemented")
+func (db *inMemoryStateDB) AddSlotToAccessList(addr common.Address, key common.Hash) {
+	db.AddAddressToAccessList(addr)
+	db.state.accessed_slots[slot{addr, key}] = 0
 }
 
 func (db *inMemoryStateDB) RevertToSnapshot(id int) {
-	//accounts := map[common.Address]int{}
 	for ; db.state != nil && db.state.id != id; db.state = db.state.parent {
 		// nothing
-		/*
-			for addr, value := range db.state.balances {
-				fmt.Printf("  removing balance of %v which is %v\n", addr, value)
-				accounts[addr] = 0
-			}
-		*/
 	}
 	if db.state == nil {
 		panic(fmt.Errorf("unable to revert to snapshot %d", id))
 	}
-	/*
-		for addr := range accounts {
-			fmt.Printf("Reverted balance of %v to %v\n", addr, db.GetBalance(addr))
-		}
-	*/
 }
 
 func (db *inMemoryStateDB) Snapshot() int {
@@ -370,6 +376,7 @@ func (db *inMemoryStateDB) GetEffects() substate.SubstateAlloc {
 func (db *inMemoryStateDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 	// Use the pre-alloc ...
 	res := *db.alloc
+
 	// ... and extend with effects
 	for key, value := range db.GetEffects() {
 		entry, exists := res[key]
@@ -385,5 +392,13 @@ func (db *inMemoryStateDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 			entry.Storage[key] = value
 		}
 	}
+
+	for key := range res {
+		if db.HasSuicided(key) {
+			delete(res, key)
+			continue
+		}
+	}
+
 	return res
 }
