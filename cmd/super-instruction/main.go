@@ -70,14 +70,12 @@ func superInstructions() {
 		}
 
 		// compute super-instruction frequency
-		// and op-code frequency (as a cross-check)
+		// and op-code frequency (for cross-checking)
 		for i:=0;i<len(ins);i++ {
 			op := ins[i]
 			OpCodeFrequency[op] += freq
 			for j:=i+2;j<=len(ins);j++ {
-				var seq []byte
-				copy(seq, ins[i:j])
-				SuperInstructionFrequency[hex.EncodeToString(seq)] += freq
+				SuperInstructionFrequency[hex.EncodeToString(ins[i:j])] += freq
 			}
 		}
 	}
