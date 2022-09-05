@@ -94,13 +94,13 @@ func writeFrequencies() {
 	defer db.Close()
 
 	// drop super-instruction frequency table
-	_, err = db.Exec("DROP TABLE IF EXISTS SuperInstructionsFrequency;")
+	_, err = db.Exec("DROP TABLE IF EXISTS SuperInstructionFrequency;")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
 
 	// create new table
-	_, err = db.Exec("CREATE TABLE SuperInstructionFrequency ( instructions TEXT, frequency NUMERIC);")
+	_, err = db.Exec("CREATE TABLE SuperInstructionFrequency (instructions TEXT, frequency NUMERIC);")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -113,7 +113,7 @@ func writeFrequencies() {
 	}
 
 	// prepare the insert statement for faster inserts
-	statement, err := db.Prepare("INSERT INTO OpCodeFrequency (opcode, frequency) VALUES (?, ?)")
+	statement, err := db.Prepare("INSERT INTO SuperInstructionFrequency (instructions, frequency) VALUES (?, ?)")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -138,7 +138,7 @@ func writeFrequencies() {
 	}
 
 	// end transaction
-	_, err = db.Exec("END TRANSACTION;")
+	_, err = db.Exec("END TRANSACTION; BEGIN TRANSACTION;")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -163,10 +163,16 @@ func writeFrequencies() {
 
 	// dump op-code map into database
 	for op, freq := range OpCodeFrequency {
+
 		_, err = statement.Exec(vm.OpCode(op).String(), freq)
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
+	}
+
+	_, err = db.Exec("END TRANSACTION;")
+	if err != nil {
+		log.Fatalln(err.Error())
 	}
 }
 
