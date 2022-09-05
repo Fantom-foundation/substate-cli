@@ -65,8 +65,7 @@ func superInstructions() {
 		// decode the basic block to bytes
 		ins, err := hex.DecodeString(bkey.Instructions)
 		if (err != nil) {
-
-			panic("Conversion failed.")
+			log.Fatal(err)
 		}
 
 		// compute super-instruction frequency
@@ -75,7 +74,8 @@ func superInstructions() {
 			op := ins[i]
 			OpCodeFrequency[op] += freq
 			for j:=i+2;j<=len(ins);j++ {
-				SuperInstructionFrequency[hex.EncodeToString(ins[i:j])] += freq
+				// SuperInstructionFrequency[hex.EncodeToString(ins[i:j])] += freq
+				SuperInstructionFrequency[string(ins[i:j])] += freq
 			}
 		}
 	}
