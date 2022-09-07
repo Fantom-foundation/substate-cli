@@ -2,15 +2,93 @@ package main
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/vm"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
-	"encoding/hex"
-	"github.com/ethereum/go-ethereum/core/vm"
 )
 
 // Number of records in a SQLITE3 transaction
 const MaxNumRecords = 10000
+
+// node structure of a trie
+type OpCodeTrie struct {
+	frequency  uint64                 // node frequency
+	opCode     byte                   // op code
+	parent     *OpCodeTrie            // parent node
+	transition map[byte]*OpCodeTrie // map
+}
+
+// create new trie node (not threadsafe!)
+func NewOpCodeTrie() *OpCodeTrie {
+	p := new(OpCodeTrie)
+	p.transition = make(map[byte]*OpCodeTrie)
+	return p
+}
+
+// add sequence to OpCodeTrie
+func (root *OpCodeTrie) add(seq []byte, frequency uint64) {
+	if seq == nil || len(seq) == 0 {
+		log.Fatal("Sequence is empty")
+	}
+	p := root
+	root.frequency += frequency
+	for i := 0; i < len(seq); i++ {
+		op := seq[i]
+		new_p, ok := p.transition[op]
+		if !ok {
+			new_p = NewOpCodeTrie()
+			p.transition[op] = new_p
+			new_p.parent = p
+			new_p.opCode = op
+		}
+		p = new_p
+		p.frequency += frequency
+	}
+}
+
+// get sequence of a node
+func (p OpCodeTrie) get() []byte {
+	var (
+		stack []*OpCodeTrie
+		seq   []byte
+	)
+	for q := &p; q.parent != nil; q = q.parent {
+		stack = append(stack, q)
+	}
+	for i := len(stack) - 1; i >= 0; i-- {
+		seq = append(seq, stack[i].opCode)
+	}
+	return seq
+}
+
+// dump trie
+var ctr = 1
+
+func (p OpCodeTrie) dump(db *sql.DB, statement *sql.Stmt) {
+	for _, node := range p.transition {
+		node.dump(db, statement)
+		seq := node.get()
+		if len(seq) > 1 {
+			bseq := []byte(string(seq))
+			// commit dataset when record threshold is reached
+			if ctr >= MaxNumRecords {
+				ctr = 1
+				_, err := db.Exec("END TRANSACTION; BEGIN TRANSACTION;")
+				if err != nil {
+					log.Fatalln(err.Error())
+				}
+			} else {
+				ctr++
+			}
+			_, err := statement.Exec(hex.EncodeToString(bseq), node.frequency)
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+		}
+	}
+}
 
 // Key for a basic-block for frequency measurement
 type BasicBlockKey struct {
@@ -46,12 +124,12 @@ func readBasicBlockFrequency() {
 	// read from table and populate the JumpDestFrequency map
 	ctr := 1
 	for rows.Next() {
-	 	var contract string
-	 	var address uint64
-	 	var instructions string
-	 	var frequency uint64
+		var contract string
+		var address uint64
+		var instructions string
+		var frequency uint64
 		err = rows.Scan(&contract, &address, &instructions, &frequency)
-		BasicBlockFrequency[BasicBlockKey{Contract:contract, Address:address, Instructions: instructions}] = frequency
+		BasicBlockFrequency[BasicBlockKey{Contract: contract, Address: address, Instructions: instructions}] = frequency
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -60,28 +138,28 @@ func readBasicBlockFrequency() {
 }
 
 // compute all super-instructions
-func superInstructions() {
+func superInstructions() *OpCodeTrie {
+	trie := NewOpCodeTrie()
 	for bkey, freq := range BasicBlockFrequency {
 		// decode the basic block to bytes
 		ins, err := hex.DecodeString(bkey.Instructions)
-		if (err != nil) {
+		if err != nil {
 			log.Fatal(err)
 		}
 
-		// compute super-instruction frequency
-		// and op-code frequency (for cross-checking)
-		for i:=0;i<len(ins);i++ {
+		// add sequence to trie
+		trie.add([]byte(ins),freq)
+
+		// compute op-code frequency (for cross-checking)
+		for i := 0; i < len(ins); i++ {
 			op := ins[i]
 			OpCodeFrequency[op] += freq
-			for j:=i+2;j<=len(ins);j++ {
-				// SuperInstructionFrequency[hex.EncodeToString(ins[i:j])] += freq
-				SuperInstructionFrequency[string(ins[i:j])] += freq
-			}
 		}
 	}
+	return trie
 }
 
-func writeFrequencies() {
+func writeFrequencies(trie *OpCodeTrie) {
 	// Dump basic-block frequency statistics into a SQLITE3 database
 
 	// open sqlite3 database
@@ -90,6 +168,13 @@ func writeFrequencies() {
 		log.Fatal(err.Error())
 	}
 	defer db.Close()
+
+	// switch synchronous mode off, enable memory journaling,
+	// and start a new transaction
+	_, err = db.Exec("PRAGMA synchronous = OFF;PRAGMA journal_mode = MEMORY")
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
 
 	// drop super-instruction frequency table
 	_, err = db.Exec("DROP TABLE IF EXISTS SuperInstructionFrequency;")
@@ -103,9 +188,8 @@ func writeFrequencies() {
 		log.Fatalln(err.Error())
 	}
 
-	// switch synchronous mode off, enable memory journaling,
-	// and start a new transaction
-	_, err = db.Exec("PRAGMA synchronous = OFF;PRAGMA journal_mode = MEMORY;BEGIN TRANSACTION")
+	// start a new transaction
+	_, err = db.Exec("BEGIN TRANSACTION")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -116,27 +200,11 @@ func writeFrequencies() {
 		log.Fatalln(err.Error())
 	}
 
-	// populate all values into the DB
-	ctr := 1
-	for ins, freq := range SuperInstructionFrequency {
-		// commit dataset when record threshold is reached
-		if ctr >= MaxNumRecords {
-			ctr = 1
-			_, err = db.Exec("END TRANSACTION; BEGIN TRANSACTION;")
-			if err != nil {
-				log.Fatalln(err.Error())
-			}
-		} else {
-			ctr++
-		}
-		_, err = statement.Exec(ins, freq)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-	}
+	// dump trie in database
+	trie.dump(db,statement)
 
 	// end transaction
-	_, err = db.Exec("END TRANSACTION; BEGIN TRANSACTION;")
+	_, err = db.Exec("END TRANSACTION;")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -153,6 +221,12 @@ func writeFrequencies() {
 		log.Fatalln(err.Error())
 	}
 
+	// begin transaction
+	_, err = db.Exec("BEGIN TRANSACTION;")
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+
 	// prepare the insert statement for faster inserts
 	statement, err = db.Prepare("INSERT INTO OpCodeFrequency (opcode, frequency) VALUES (?, ?)")
 	if err != nil {
@@ -161,13 +235,13 @@ func writeFrequencies() {
 
 	// dump op-code map into database
 	for op, freq := range OpCodeFrequency {
-
 		_, err = statement.Exec(vm.OpCode(op).String(), freq)
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
 	}
 
+	// end transaction
 	_, err = db.Exec("END TRANSACTION;")
 	if err != nil {
 		log.Fatalln(err.Error())
@@ -179,10 +253,10 @@ func main() {
 	readBasicBlockFrequency()
 
 	fmt.Printf("Compute all super-instruction/op-code frequencies ...\n")
-	superInstructions()
+	trie := superInstructions()
 
 	fmt.Printf("Write super-instruction/op-code frequencies ...\n")
-	writeFrequencies() 
+	writeFrequencies(trie)
 
 	fmt.Printf("Done.\n")
 }
