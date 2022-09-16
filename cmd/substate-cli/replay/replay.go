@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/big"
 	"os"
@@ -359,12 +360,38 @@ func printAccountDiffSummary(label string, want, have *substate.SubstateAccount)
 	}
 }
 
+// data collection execution context
+type DataCollectorContext struct {
+	stats  *vm.VmMicroData
+	ctx    context.Context
+	cancel context.CancelFunc
+	ch     chan struct{}
+}
+
+// create new execution context for a data collector
+func NewDataCollectorContext() *DataCollectorContext {
+	dcc := new(DataCollectorContext)
+	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
+	dcc.ch = make(chan struct{})
+	dcc.stats = vm.NewVmMicroData()
+	return dcc
+}
+
 // record-replay: func replayAction for replay command
 func replayAction(ctx *cli.Context) error {
 	var err error
 
 	if len(ctx.Args()) != 2 {
 		return fmt.Errorf("substate-cli replay command requires exactly 2 arguments")
+	}
+
+	// spawn contexts for data collector workers
+	var dcc [5]*DataCollectorContext
+	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
+		for i := 0; i < 5; i++ {
+			dcc[i] = NewDataCollectorContext()
+			go vm.DataCollector(i, dcc[i].ctx, dcc[i].ch, dcc[i].stats)
+		}
 	}
 
 	chainID = ctx.Int(ChainIDFlag.Name)
@@ -423,7 +450,19 @@ func replayAction(ctx *cli.Context) error {
 	fmt.Printf("substate-cli replay: net VM time: %v\n", getVmDuration())
 
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
-		vm.PrintStatistics()
+		// cancel collectors
+		for i := 0; i < 5; i++ {
+			(dcc[i].cancel)() // stop data collector
+			<-(dcc[i].ch)     // wait for data collector to finish
+		}
+
+		// merge all stats from collectors
+		var stats = vm.NewVmMicroData()
+		for i := 0; i < 5; i++ {
+			stats.Merge(dcc[i].stats)
+		}
+		stats.Dump()
+
 	}
 	if strings.HasSuffix(ctx.String(InterpreterImplFlag.Name), "-stats") {
 		lfvm.PrintCollectedInstructionStatistics()
