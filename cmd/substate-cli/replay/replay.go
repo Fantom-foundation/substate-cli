@@ -461,7 +461,7 @@ func replayAction(ctx *cli.Context) error {
 		for i := 0; i < 5; i++ {
 			stats.Merge(dcc[i].stats)
 		}
-		stats.Dump()
+		stats.Dump(gitDate+"-"+gitCommit+"-"+string(chainID))
 
 	}
 	if strings.HasSuffix(ctx.String(InterpreterImplFlag.Name), "-stats") {
