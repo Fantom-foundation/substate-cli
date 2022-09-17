@@ -361,19 +361,19 @@ func printAccountDiffSummary(label string, want, have *substate.SubstateAccount)
 }
 
 // data collection execution context
-type DataCollectorContext struct {
-	stats  *vm.VmMicroData
+type MicroProfilingCollectorContext struct {
+	stats  *vm.MicroProfileStatistic
 	ctx    context.Context
 	cancel context.CancelFunc
 	ch     chan struct{}
 }
 
 // create new execution context for a data collector
-func NewDataCollectorContext() *DataCollectorContext {
-	dcc := new(DataCollectorContext)
+func NewMicroProfilingCollectorContext() *MicroProfilingCollectorContext {
+	dcc := new(MicroProfilingCollectorContext)
 	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
 	dcc.ch = make(chan struct{})
-	dcc.stats = vm.NewVmMicroData()
+	dcc.stats = vm.NewMicroProfileStatistic()
 	return dcc
 }
 
@@ -386,11 +386,11 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	// spawn contexts for data collector workers
-	var dcc [5]*DataCollectorContext
+	var dcc [5]*MicroProfilingCollectorContext
 	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
 		for i := 0; i < 5; i++ {
-			dcc[i] = NewDataCollectorContext()
-			go vm.DataCollector(i, dcc[i].ctx, dcc[i].ch, dcc[i].stats)
+			dcc[i] = NewMicroProfilingCollectorContext()
+			go vm.MicroProfilingCollector(i, dcc[i].ctx, dcc[i].ch, dcc[i].stats)
 		}
 	}
 
@@ -457,7 +457,7 @@ func replayAction(ctx *cli.Context) error {
 		}
 
 		// merge all stats from collectors
-		var stats = vm.NewVmMicroData()
+		var stats = vm.NewMicroProfileStatistic()
 		for i := 0; i < 5; i++ {
 			stats.Merge(dcc[i].stats)
 		}
