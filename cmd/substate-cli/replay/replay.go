@@ -390,7 +390,7 @@ func replayAction(ctx *cli.Context) error {
 	if ctx.Bool(MicroProfilingFlag.Name) {
 		for i := 0; i < 5; i++ {
 			dcc[i] = NewMicroProfilingCollectorContext()
-			go vm.MicroProfilingCollector(i, dcc[i].ctx, dcc[i].ch, dcc[i].stats)
+			go vm.MicroProfilingCollector(dcc[i].ctx, dcc[i].ch, dcc[i].stats)
 		}
 	}
 
@@ -412,8 +412,9 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	if ctx.Bool(ProfileEVMCallFlag.Name) {
-		vm.ProfileEVMCall = true
+		evmcore.ProfileEVMCall = true
 	}
+
 	if ctx.Bool(MicroProfilingFlag.Name) {
 		vm.MicroProfiling = true
 	}
