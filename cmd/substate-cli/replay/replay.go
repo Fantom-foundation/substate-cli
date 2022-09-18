@@ -44,9 +44,9 @@ var ProfileEVMCallFlag = cli.BoolFlag{
 	Usage: "enable profiling for EVM call",
 }
 
-var ProfileEVMOpCodeFlag = cli.BoolFlag{
-	Name:  "profiling-opcode",
-	Usage: "enable profiling for EVM opcodes",
+var MicroProfilingFlag = cli.BoolFlag{
+	Name:  "micro-profiling",
+	Usage: "enable micro-profiling of EVM",
 }
 
 var OnlySuccessfulFlag = cli.BoolFlag{
@@ -83,7 +83,7 @@ var ReplayCommand = cli.Command{
 		substate.SubstateDirFlag,
 		ChainIDFlag,
 		ProfileEVMCallFlag,
-		ProfileEVMOpCodeFlag,
+		MicroProfilingFlag,
 		InterpreterImplFlag,
 		OnlySuccessfulFlag,
 		CpuProfilingFlag,
@@ -387,7 +387,7 @@ func replayAction(ctx *cli.Context) error {
 
 	// spawn contexts for data collector workers
 	var dcc [5]*MicroProfilingCollectorContext
-	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
+	if ctx.Bool(MicroProfilingFlag.Name) {
 		for i := 0; i < 5; i++ {
 			dcc[i] = NewMicroProfilingCollectorContext()
 			go vm.MicroProfilingCollector(i, dcc[i].ctx, dcc[i].ch, dcc[i].stats)
@@ -414,8 +414,8 @@ func replayAction(ctx *cli.Context) error {
 	if ctx.Bool(ProfileEVMCallFlag.Name) {
 		vm.ProfileEVMCall = true
 	}
-	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
-		vm.ProfileEVMOpCode = true
+	if ctx.Bool(MicroProfilingFlag.Name) {
+		vm.MicroProfiling = true
 	}
 
 	substate.SetSubstateFlags(ctx)
@@ -449,7 +449,7 @@ func replayAction(ctx *cli.Context) error {
 
 	fmt.Printf("substate-cli replay: net VM time: %v\n", getVmDuration())
 
-	if ctx.Bool(ProfileEVMOpCodeFlag.Name) {
+	if ctx.Bool(MicroProfilingFlag.Name) {
 		// cancel collectors
 		for i := 0; i < 5; i++ {
 			(dcc[i].cancel)() // stop data collector
