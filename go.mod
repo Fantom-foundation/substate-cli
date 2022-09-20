@@ -6,7 +6,6 @@ require (
 	github.com/Fantom-foundation/go-opera v1.1.1-rc.2
 	github.com/ethereum/go-ethereum v1.10.8
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
 
@@ -27,6 +26,7 @@ require (
 	github.com/holiman/bloomfilter/v2 v2.0.3 // indirect
 	github.com/holiman/uint256 v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
+	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/tsdb v0.10.0 // indirect
