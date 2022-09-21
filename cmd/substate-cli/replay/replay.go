@@ -49,6 +49,11 @@ var MicroProfilingFlag = cli.BoolFlag{
 	Usage: "enable micro-profiling of EVM",
 }
 
+var BasicBlockProfilingFlag = cli.BoolFlag{
+	Name:  "basic-block-profiling",
+	Usage: "enable profiling of basic block",
+}
+
 var OnlySuccessfulFlag = cli.BoolFlag{
 	Name:  "only-successful",
 	Usage: "only runs transactions that have been successful",
@@ -69,6 +74,18 @@ var UseInMemoryStateDbFlag = cli.BoolFlag{
 	Usage: "enables a faster, yet still experimental StateDB implementation",
 }
 
+var DatabaseNameFlag = cli.StringFlag{
+	Name:  "db",
+	Usage: "Set a database name for storing micro-profiling results",
+	Value: "./profiling.db",
+}
+
+var ChannelBufferSizeFlag = cli.IntFlag{
+	Name:  "buffer-size",
+	Usage: "Set a buffer size for profiling channel",
+	Value: 100000,
+}
+
 // record-replay: substate-cli replay command
 var ReplayCommand = cli.Command{
 	Action:    replayAction,
@@ -84,6 +101,9 @@ var ReplayCommand = cli.Command{
 		ChainIDFlag,
 		ProfileEVMCallFlag,
 		MicroProfilingFlag,
+		BasicBlockProfilingFlag,
+		DatabaseNameFlag,
+		ChannelBufferSizeFlag,
 		InterpreterImplFlag,
 		OnlySuccessfulFlag,
 		CpuProfilingFlag,
@@ -99,6 +119,28 @@ last block of the inclusive range of blocks to replay transactions.`,
 
 var vm_duration time.Duration
 
+type ReplayConfig struct {
+	vm_impl          string
+	only_successful  bool
+	use_in_memory_db bool
+}
+
+// data collection execution context
+type MicroProfilingCollectorContext struct {
+	stats  *vm.MicroProfileStatistic
+	ctx    context.Context
+	cancel context.CancelFunc
+	ch     chan struct{}
+}
+
+// data collection execution context
+type BasicBlockProfilingCollectorContext struct {
+	stats  *vm.BasicBlockProfileStatistic
+	ctx    context.Context
+	cancel context.CancelFunc
+	ch     chan struct{}
+}
+
 func resetVmDuration() {
 	atomic.StoreInt64((*int64)(&vm_duration), 0)
 }
@@ -109,12 +151,6 @@ func addVmDuration(delta time.Duration) {
 
 func getVmDuration() time.Duration {
 	return time.Duration(atomic.LoadInt64((*int64)(&vm_duration)))
-}
-
-type ReplayConfig struct {
-	vm_impl          string
-	only_successful  bool
-	use_in_memory_db bool
 }
 
 // replayTask replays a transaction substate
@@ -360,20 +396,21 @@ func printAccountDiffSummary(label string, want, have *substate.SubstateAccount)
 	}
 }
 
-// data collection execution context
-type MicroProfilingCollectorContext struct {
-	stats  *vm.MicroProfileStatistic
-	ctx    context.Context
-	cancel context.CancelFunc
-	ch     chan struct{}
-}
-
 // create new execution context for a data collector
 func NewMicroProfilingCollectorContext() *MicroProfilingCollectorContext {
 	dcc := new(MicroProfilingCollectorContext)
 	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
 	dcc.ch = make(chan struct{})
 	dcc.stats = vm.NewMicroProfileStatistic()
+	return dcc
+}
+
+// create new execution context for a data collector
+func NewBasicBlockProfilingCollectorContext() *BasicBlockProfilingCollectorContext {
+	dcc := new(BasicBlockProfilingCollectorContext)
+	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
+	dcc.ch = make(chan struct{})
+	dcc.stats = vm.NewBasicBlockProfileStatistic()
 	return dcc
 }
 
@@ -386,12 +423,54 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	// spawn contexts for data collector workers
-	var dcc [5]*MicroProfilingCollectorContext
 	if ctx.Bool(MicroProfilingFlag.Name) {
+		var dcc [5]*MicroProfilingCollectorContext
 		for i := 0; i < 5; i++ {
 			dcc[i] = NewMicroProfilingCollectorContext()
 			go vm.MicroProfilingCollector(dcc[i].ctx, dcc[i].ch, dcc[i].stats)
 		}
+
+		defer func() {
+			// cancel collectors
+			for i := 0; i < 5; i++ {
+				(dcc[i].cancel)() // stop data collector
+				<-(dcc[i].ch)     // wait for data collector to finish
+			}
+
+			// merge all stats from collectors
+			var stats = vm.NewMicroProfileStatistic()
+			for i := 0; i < 5; i++ {
+				stats.Merge(dcc[i].stats)
+			}
+			version := fmt.Sprintf("git-date:%v, git-commit:%v, chaind-id:%v", gitDate, gitCommit, chainID)
+			stats.Dump(version)
+			fmt.Printf("substate-cli replay: recorded micro profiling statistics in %v\n", vm.MicroProfilingDB)
+		}()
+
+	}
+
+	if ctx.Bool(BasicBlockProfilingFlag.Name) {
+		var dcc [5]*BasicBlockProfilingCollectorContext
+		for i := 0; i < 5; i++ {
+			dcc[i] = NewBasicBlockProfilingCollectorContext()
+			go vm.BasicBlockProfilingCollector(dcc[i].ctx, dcc[i].ch, dcc[i].stats)
+		}
+
+		defer func() {
+			// cancel collectors
+			for i := 0; i < 5; i++ {
+				(dcc[i].cancel)() // stop data collector
+				<-(dcc[i].ch)     // wait for data collector to finish
+			}
+
+			// merge all stats from collectors
+			var stats = vm.NewBasicBlockProfileStatistic()
+			for i := 0; i < 5; i++ {
+				stats.Merge(dcc[i].stats)
+			}
+			stats.Dump()
+			fmt.Printf("substate-cli replay: recorded basic block profiling statistics in %v\n", vm.BasicBlockProfilingDB)
+		}()
 	}
 
 	chainID = ctx.Int(ChainIDFlag.Name)
@@ -417,6 +496,14 @@ func replayAction(ctx *cli.Context) error {
 
 	if ctx.Bool(MicroProfilingFlag.Name) {
 		vm.MicroProfiling = true
+		vm.MicroProfilingBufferSize = ctx.Int(ChannelBufferSizeFlag.Name)
+		vm.MicroProfilingDB = ctx.String(DatabaseNameFlag.Name)
+	}
+
+	if ctx.Bool(BasicBlockProfilingFlag.Name) {
+		vm.BasicBlockProfiling = true
+		vm.BasicBlockProfilingBufferSize = ctx.Int(ChannelBufferSizeFlag.Name)
+		vm.BasicBlockProfilingDB = ctx.String(DatabaseNameFlag.Name)
 	}
 
 	substate.SetSubstateFlags(ctx)
@@ -449,25 +536,9 @@ func replayAction(ctx *cli.Context) error {
 	err = taskPool.Execute()
 
 	fmt.Printf("substate-cli replay: net VM time: %v\n", getVmDuration())
-
-	if ctx.Bool(MicroProfilingFlag.Name) {
-		// cancel collectors
-		for i := 0; i < 5; i++ {
-			(dcc[i].cancel)() // stop data collector
-			<-(dcc[i].ch)     // wait for data collector to finish
-		}
-
-		// merge all stats from collectors
-		var stats = vm.NewMicroProfileStatistic()
-		for i := 0; i < 5; i++ {
-			stats.Merge(dcc[i].stats)
-		}
-		version := fmt.Sprintf("git-date:%v, git-commit:%v, chaind-id:%v", gitDate, gitCommit, chainID)
-		stats.Dump(version)
-
-	}
 	if strings.HasSuffix(ctx.String(InterpreterImplFlag.Name), "-stats") {
 		lfvm.PrintCollectedInstructionStatistics()
 	}
+
 	return err
 }
