@@ -16,6 +16,7 @@ import (
 	"github.com/Fantom-foundation/go-opera/opera"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	//"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/core/vm/lfvm"
@@ -200,6 +201,7 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	} else {
 		statedb = MakeOffTheChainStateDB(inputAlloc)
 	}
+	statedb = NewStateProxyDB(statedb)
 
 	// Apply Message
 	var (
