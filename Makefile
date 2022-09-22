@@ -9,9 +9,9 @@ substate-cli:
 	GIT_DATE=`git log -1 --date=short --pretty=format:%ct 2>/dev/null || echo ""` && \
 	GOPROXY=$(GOPROXY) \
 	go build \
-	    -ldflags "-s -w -X github.com/Fantom-foundation/substate-cli/cmd/substate-cli/replay.gitCommit=$${GIT_COMMIT} -X github.com/Fantom-foundation/substate-cli/cmd/substate-cli/replay.gitDate=$${GIT_DATE}" \
+	    -ldflags "-s -w -X github.com/Fantom-foundation/substate-cli/cmd/replay.gitCommit=$${GIT_COMMIT} -X github.com/Fantom-foundation/substate-cli/cmd/replay.gitDate=$${GIT_DATE}" \
 	    -o build/substate-cli \
-	    ./cmd/substate-cli
+	    ./cmd
 
 .PHONY: clean
 clean:

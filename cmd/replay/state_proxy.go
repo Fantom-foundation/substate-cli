@@ -25,7 +25,7 @@ import (
 )
 
 type StateProxyDB struct {
-	db       StateDB // state db
+	db           StateDB // state db
 }
 
 func NewStateProxyDB(db StateDB) StateDB {
