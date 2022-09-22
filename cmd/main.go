@@ -34,6 +34,7 @@ func init() {
 	app.Flags = []cli.Flag{}
 	app.Commands = []cli.Command{
 		replay.ReplayCommand,
+		replay.TraceCommand,
 		replay.GetStorageUpdateSizeCommand,
 		replay.GetCodeCommand,
 		replay.GetCodeSizeCommand,

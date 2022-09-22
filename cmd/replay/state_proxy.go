@@ -26,11 +26,17 @@ import (
 
 type StateProxyDB struct {
 	db           StateDB // state db
+	cdict        *ContractDictionary
+	sdict        *StorageDictionary
+	ch           chan StateOperation
 }
 
 func NewStateProxyDB(db StateDB) StateDB {
 	p := new(StateProxyDB)
 	p.db = db
+	p.cdict = NewContractDictionary()
+	p.sdict = NewStorageDictionary()
+	p.ch = make(chan StateOperation, 10000)
 	return p
 }
 
@@ -98,11 +104,17 @@ func (s *StateProxyDB) GetCommittedState(addr common.Address, key common.Hash) c
 }
 
 func (s *StateProxyDB) GetState(addr common.Address, key common.Hash) common.Hash {
+	cidx, _ := s.cdict.Encode(addr)
+	sidx, _ := s.sdict.Encode(key)
+	s.ch <- NewGetStateOperation(cidx, sidx)
 	value := s.db.GetState(addr,key) 
 	return value
 }
 
 func (s *StateProxyDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
+	cidx, _ := s.cdict.Encode(addr)
+	sidx, _ := s.sdict.Encode(key)
+	s.ch <- NewSetStateOperation(cidx, sidx, value)
 	s.db.SetState(addr, key, value)
 }
 
