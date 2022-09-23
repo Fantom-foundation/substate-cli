@@ -21,9 +21,6 @@ func NewStateProxyDB(db StateDB, cdict *ContractDictionary, sdict *StorageDictio
 	p.cdict = cdict
 	p.sdict = sdict
 	p.ch = ch
-	//p.cdict = NewContractDictionary()
-	//p.sdict = NewStorageDictionary()
-	//p.ch = make(chan StateOperation, 10000)
 	return p
 }
 
