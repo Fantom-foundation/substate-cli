@@ -1,9 +1,11 @@
 package replay
 
 import (
+	"binary"
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"strconv"
 	"time"
 
@@ -201,12 +203,17 @@ func NewStateOperationWriterContext() *StateOperationWriterContext {
 }
 
 func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation) {
+	fn := []{"GetState.bin","SetState.bin"}
+	f := make([2]os.File)
+	for i := 0; i < 2; i++ {
+		f[i], _ = os.FileOpen(fn[i], os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	}
 	defer close(done)
 	var opNum uint64 = 0
 	for {
 		select {
 		case op := <- ch:
-			op.Write(opNum)
+			op.Write(opNum, f)
 			opNum++
 		case <-ctx.Done():
 			if len(ch) == 0 {
