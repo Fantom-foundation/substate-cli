@@ -201,7 +201,6 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 	} else {
 		statedb = MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = NewStateProxyDB(statedb)
 
 	// Apply Message
 	var (

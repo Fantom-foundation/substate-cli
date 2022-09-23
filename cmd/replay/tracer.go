@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -49,7 +50,7 @@ type TraceConfig struct {
 }
 
 // traceTask traces a transaction substate
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate) error {
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) error {
 
 	// If requested, skip failed transactions.
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
@@ -95,7 +96,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	} else {
 		statedb = MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = NewStateProxyDB(statedb)
+	statedb = NewStateProxyDB(statedb, cdict, sdict, ch)
 
 	// Apply Message
 	var (
@@ -185,6 +186,36 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	return nil
 }
 
+// data collection execution context
+type StateOperationWriterContext struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	ch     chan struct{}
+}
+// create new execution context for a data writer
+func NewStateOperationWriterContext() *StateOperationWriterContext {
+	dcc := new(StateOperationWriterContext)
+	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
+	dcc.ch = make(chan struct{})
+	return dcc
+}
+
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation) {
+	defer close(done)
+	var opNum uint64 = 0
+	for {
+		select {
+		case op := <- ch:
+			op.Write(opNum)
+			opNum++
+		case <-ctx.Done():
+			if len(ch) == 0 {
+				return
+			}
+		}
+	}
+}
+
 // record-trace: func traceAction for trace command
 func traceAction(ctx *cli.Context) error {
 	var err error
@@ -192,6 +223,20 @@ func traceAction(ctx *cli.Context) error {
 	if len(ctx.Args()) != 2 {
 		return fmt.Errorf("substate-cli trace command requires exactly 2 arguments")
 	}
+
+	cdict := NewContractDictionary()
+	sdict := NewStorageDictionary()
+	ch := make(chan StateOperation, 10000)
+	
+	var dcc *StateOperationWriterContext
+	dcc = NewStateOperationWriterContext()
+	go StateOperationWriter(dcc.ctx, dcc.ch, ch)
+
+	defer func() {
+		// cancel writers
+		(dcc.cancel)() // stop writer
+		<-(dcc.ch)     // wait for writer to finish
+	}()
 
 	chainID = ctx.Int(ChainIDFlag.Name)
 
@@ -216,25 +261,16 @@ func traceAction(ctx *cli.Context) error {
 		only_successful:  ctx.Bool(OnlySuccessfulFlag.Name),
 		use_in_memory_db: ctx.Bool(UseInMemoryStateDbFlag.Name),
 	}
-/*
-	task := func(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
-		return traceTask(config, block, tx, recording, taskPool)
-	}
 
-	taskPool := substate.NewSubstateTaskPool("substate-cli trace", task, uint64(first), uint64(last), ctx)
-	err = taskPool.Execute()
-*/
-	
 	iter := substate.NewSubstateIterator(first, ctx.Int(substate.WorkersFlag.Name))
 	defer iter.Release()
 	for iter.Next(){
 		tx := iter.Value()
-		traceTask(config, tx.Block, tx.Transaction, tx.Substate)
+		traceTask(config, tx.Block, tx.Transaction, tx.Substate, cdict, sdict, ch)
 		if tx.Block >= last {
 			break
 		}
 	}
-	
 
 	return err
 }

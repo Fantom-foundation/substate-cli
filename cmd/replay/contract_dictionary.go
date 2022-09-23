@@ -6,14 +6,12 @@ import (
 	"log"
 	"math"
 	"os"
-	"sync"
 )
 
 // Dictioanary data structure
 type ContractDictionary struct {
 	contractToIdx map[common.Address]uint32  // contract to index map for encoding
 	idxToContract []common.Address         // contract address slice for decoding 
-	mutex         sync.Mutex               // mutex for decode/encode
 }
 
 // Create new dictionary
@@ -26,7 +24,6 @@ func NewContractDictionary() *ContractDictionary {
 
 // Encode an address in the dictionary to an index
 func (cd *ContractDictionary) Encode(addr common.Address) (uint32, error) {
-	cd.mutex.Lock()
 	var (
 		idx uint32
 		ok  bool
@@ -42,13 +39,11 @@ func (cd *ContractDictionary) Encode(addr common.Address) (uint32, error) {
 			err = errors.New("Contract dictionary exhausted")
 		}
 	}
-	cd.mutex.Unlock()
 	return idx, err
 }
 
 // Decode a dictionary index to an address
 func (cd *ContractDictionary) Decode(idx uint32) (common.Address, error) {
-	cd.mutex.Lock()
 	var (
 		addr common.Address
 		err  error
@@ -60,13 +55,11 @@ func (cd *ContractDictionary) Decode(idx uint32) (common.Address, error) {
 		addr = common.Address{}
 		err = errors.New("Index out-of-bound")
 	}
-	cd.mutex.Unlock()
 	return addr, err
 }
 
 // Write dictionary to a binary file
 func (cd *ContractDictionary) Write(filename string) {
-	cd.mutex.Lock()
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Fatal(err)
@@ -80,12 +73,10 @@ func (cd *ContractDictionary) Write(filename string) {
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
 	}
-	cd.mutex.Unlock()
 }
 
 // Read dictionary from a binary file
 func (cd *ContractDictionary) Read(filename string) {
-	cd.mutex.Lock()
 	cd.contractToIdx = map[common.Address]uint32{}
 	cd.idxToContract = []common.Address{}
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDONLY, 0644)
@@ -111,5 +102,4 @@ func (cd *ContractDictionary) Read(filename string) {
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
 	}
-	cd.mutex.Unlock()
 }
