@@ -18,13 +18,14 @@ package replay
 
 import (
 	"github.com/ethereum/go-ethereum/common"
-	"testing"
+	"math"
 	"os"
+	"testing"
 )
 
-// Encodes and decodes an address and compare whether the encoded and decoded address is the same.
-// In addition, the testcase checks whether the encoded address is assigned the zero index.
-func TestStorageDictionarySimple1(t *testing.T) {
+// Encodes and decodes an address and compare whether the encoded
+// and decoded address is the same, and its index is zero.
+func TestPositiveStorageDictionarySimple1(t *testing.T) {
 	encodedAddr := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F272")
 	dict := NewStorageDictionary()
 	idx, err1 := dict.Encode(encodedAddr)
@@ -34,9 +35,9 @@ func TestStorageDictionarySimple1(t *testing.T) {
 	}
 }
 
-// Encodes/decodes two addresses and checks that encoded/decoded addresses are the same. 
-// In addition, the testcase checks whether the encoded addresses have the zero and one index.
-func TestStorageDictionarySimple2(t *testing.T) {
+// Encodes/decodes two addresses and checks that encoded/decoded
+// addresses are the same, and their indices are zero and one.
+func TestPositiveStorageDictionarySimple2(t *testing.T) {
 	encodedAddr1 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F272")
 	encodedAddr2 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F273")
 	dict := NewStorageDictionary()
@@ -51,9 +52,10 @@ func TestStorageDictionarySimple2(t *testing.T) {
 		t.Fatalf("Encoding/Decoding is not symmetric")
 	}
 }
-// Encodes one address twice and checks that the address is encored only once.
-// In addition, the testcase checks whether the encoded addresses have the zero index.
-func TestStorageDictionarySimple3(t *testing.T) {
+
+// Encodes one address twice and checks that the address
+// is encoded only once, and its index is zero.
+func TestPositiveStorageDictionarySimple3(t *testing.T) {
 	encodedAddr1 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F272")
 	dict := NewStorageDictionary()
 	idx1, err1 := dict.Encode(encodedAddr1)
@@ -68,29 +70,44 @@ func TestStorageDictionarySimple3(t *testing.T) {
 	}
 }
 
+// Checking whether dictionary overflows can be captured
+func TestNegativeStorageDictionaryOverflow(t *testing.T) {
+	encodedAddr1 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F272")
+	encodedAddr2 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F273")
+	dict := NewStorageDictionary()
+	StorageDictionaryLimit = 1
+	_, err1 := dict.Encode(encodedAddr1)
+	if err1 != nil {
+		t.Fatalf("Failed encoding")
+	}
+	_, err2 := dict.Encode(encodedAddr2)
+	if err2 == nil {
+		t.Fatalf("Failed stopping to encode")
+	}
+	StorageDictionaryLimit = math.MaxUint32
+}
 
-// This is a negative test checking whether overflows can captured in the dictionary
-//func TestStorageDictionaryOverflow(t *testing.T) {
-//	data := common.Address{}.Bytes()
-//	dict := NewStorageDictionary()
-//	var i uint64
-//	for i=0; i < math.MaxUint32+1; i++ {
-//		for j:=0;j < common.AddressLength; j++ {
-//			if (data[j] <= 255) {
-//				data[j]++
-//				break
-//			} else {
-//				data[j] = 0
-//			}
-//		}
-//		addr := common.BytesToAddress(data)
-//		dict.Encode(addr)
-//	}
-//}
+//  Checking whether invalid indices for Decode() can be captured
+func TestNegativeStorageDictionaryDecodingFailure1(t *testing.T) {
+	dict := NewStorageDictionary()
+	_, err1 := dict.Decode(0)
+	if err1 == nil {
+		t.Fatalf("Failed detecting wrong index for Decode()")
+	}
+}
 
-// Encodes/decodes two addresses and checks that encoded/decoded addresses are the same. 
+//  Checking whether invalid indices for Decode() can be captured
+func TestNegativeStorageDictionaryDecodingFailure2(t *testing.T) {
+	dict := NewStorageDictionary()
+	_, err1 := dict.Decode(math.MaxUint32)
+	if err1 == nil {
+		t.Fatalf("Failed detecting wrong index for Decode()")
+	}
+}
+
+// Encodes/decodes two addresses and checks that encoded/decoded addresses are the same.
 // In addition, the testcase checks whether the encoded addresses have the zero and one index.
-func TestStorageDictionaryReadWrite(t *testing.T) {
+func TestPositiveStorageDictionaryReadWrite(t *testing.T) {
 	filename := "./test.dict"
 	encodedAddr1 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F272")
 	encodedAddr2 := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F273")
@@ -101,7 +118,6 @@ func TestStorageDictionaryReadWrite(t *testing.T) {
 
 	rDict := NewStorageDictionary()
 	rDict.Read(filename)
-
 	decodedAddr1, err3 := rDict.Decode(idx1)
 	decodedAddr2, err4 := rDict.Decode(idx2)
 	if encodedAddr1 != decodedAddr1 || err1 != nil || err3 != nil || idx1 != 0 {

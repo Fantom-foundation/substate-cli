@@ -10,8 +10,8 @@ import (
 
 // Dictioanary data structure
 type ContractDictionary struct {
-	contractToIdx map[common.Address]uint32  // contract to index map for encoding
-	idxToContract []common.Address         // contract address slice for decoding 
+	contractToIdx map[common.Address]uint32 // contract to index map for encoding
+	idxToContract []common.Address          // contract address slice for decoding
 }
 
 // Create new dictionary

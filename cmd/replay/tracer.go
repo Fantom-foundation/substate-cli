@@ -1,9 +1,9 @@
 package replay
 
 import (
-	"binary"
 	"context"
 	"fmt"
+	"log"
 	"math/big"
 	"os"
 	"strconv"
@@ -44,7 +44,6 @@ The substate-cli trace command requires two arguments:
 last block of the inclusive range of blocks to trace transactions.`,
 }
 
-
 type TraceConfig struct {
 	vm_impl          string
 	only_successful  bool
@@ -52,7 +51,7 @@ type TraceConfig struct {
 }
 
 // traceTask traces a transaction substate
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) error {
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) error {
 
 	// If requested, skip failed transactions.
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
@@ -98,7 +97,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	} else {
 		statedb = MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = NewStateProxyDB(statedb, cdict, sdict, ch)
+	statedb = NewStateProxyDB(statedb, contractDict, storageDict, ch)
 
 	// Apply Message
 	var (
@@ -188,37 +187,33 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	return nil
 }
 
-// data collection execution context
-type StateOperationWriterContext struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	ch     chan struct{}
-}
-// create new execution context for a data writer
-func NewStateOperationWriterContext() *StateOperationWriterContext {
-	dcc := new(StateOperationWriterContext)
-	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
-	dcc.ch = make(chan struct{})
-	return dcc
-}
-
 func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation) {
-	fn := []{"GetState.bin","SetState.bin"}
-	f := make([2]os.File)
-	for i := 0; i < 2; i++ {
-		f[i], _ = os.FileOpen(fn[i], os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	files := []*os.File{nil, nil}
+	fn := []string{"GetState.bin", "SetState.bin"}
+	for i := 0; i < NumStateOperations; i++ {
+		f, err := os.OpenFile(fn[i], os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Fatalf("Cannot open state file %v", i)
+		}
+		files[i] = f
 	}
 	defer close(done)
 	var opNum uint64 = 0
 	for {
 		select {
-		case op := <- ch:
-			op.Write(opNum, f)
+		case op := <-ch:
+			op.Write(opNum, files)
 			opNum++
 		case <-ctx.Done():
 			if len(ch) == 0 {
 				return
 			}
+		}
+	}
+	for i := 0; i < NumStateOperations; i++ {
+		err := files[i].Close()
+		if err != nil {
+			log.Fatalf("Cannot close state file %v", i)
 		}
 	}
 }
@@ -231,18 +226,17 @@ func traceAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli trace command requires exactly 2 arguments")
 	}
 
-	cdict := NewContractDictionary()
-	sdict := NewStorageDictionary()
-	ch := make(chan StateOperation, 10000)
-	
-	var dcc *StateOperationWriterContext
-	dcc = NewStateOperationWriterContext()
-	go StateOperationWriter(dcc.ctx, dcc.ch, ch)
+	contractDict := NewContractDictionary()
+	storageDict := NewStorageDictionary()
+	opChannel := make(chan StateOperation, 10000)
 
+	cctx, cancel := context.WithCancel(context.Background())
+	cancelChannel := make(chan struct{})
+	go StateOperationWriter(cctx, cancelChannel, opChannel)
 	defer func() {
 		// cancel writers
-		(dcc.cancel)() // stop writer
-		<-(dcc.ch)     // wait for writer to finish
+		(cancel)()        // stop writer
+		<-(cancelChannel) // wait for writer to finish
 	}()
 
 	chainID = ctx.Int(ChainIDFlag.Name)
@@ -271,9 +265,9 @@ func traceAction(ctx *cli.Context) error {
 
 	iter := substate.NewSubstateIterator(first, ctx.Int(substate.WorkersFlag.Name))
 	defer iter.Release()
-	for iter.Next(){
+	for iter.Next() {
 		tx := iter.Value()
-		traceTask(config, tx.Block, tx.Transaction, tx.Substate, cdict, sdict, ch)
+		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
 		if tx.Block >= last {
 			break
 		}

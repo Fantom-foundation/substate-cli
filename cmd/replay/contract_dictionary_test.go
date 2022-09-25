@@ -18,8 +18,8 @@ package replay
 
 import (
 	"github.com/ethereum/go-ethereum/common"
-	"testing"
 	"os"
+	"testing"
 )
 
 // Encodes and decodes an address and compare whether the encoded and decoded address is the same.
@@ -88,7 +88,7 @@ func TestContractDictionarySimple3(t *testing.T) {
 //	}
 //}
 
-// Encodes/decodes two addresses and checks that encoded/decoded addresses are the same. 
+// Encodes/decodes two addresses and checks that encoded/decoded addresses are the same.
 // In addition, the testcase checks whether the encoded addresses have the zero and one index.
 func TestContractDictionaryReadWrite(t *testing.T) {
 	filename := "./test.dict"

@@ -8,10 +8,13 @@ import (
 	"os"
 )
 
+// Storage limit
+var StorageDictionaryLimit uint32 = math.MaxUint32
+
 // Dictioanary data structure
 type StorageDictionary struct {
-	storageToIdx map[common.Hash]uint32  // storage address to index map for encoding
-	idxToStorage []common.Hash         // storage address slice for decoding 
+	storageToIdx map[common.Hash]uint32 // storage address to index map for encoding
+	idxToStorage []common.Hash          // storage address slice for decoding
 }
 
 // Create new dictionary
@@ -31,7 +34,7 @@ func (cd *StorageDictionary) Encode(key common.Hash) (uint32, error) {
 	)
 	if idx, ok = cd.storageToIdx[key]; !ok {
 		idx = uint32(len(cd.idxToStorage))
-		if idx != math.MaxUint32 {
+		if idx != StorageDictionaryLimit {
 			cd.storageToIdx[key] = idx
 			cd.idxToStorage = append(cd.idxToStorage, key)
 		} else {
@@ -46,7 +49,7 @@ func (cd *StorageDictionary) Encode(key common.Hash) (uint32, error) {
 func (cd *StorageDictionary) Decode(idx uint32) (common.Hash, error) {
 	var (
 		key common.Hash
-		err  error
+		err error
 	)
 	if idx < uint32(len(cd.idxToStorage)) {
 		key = cd.idxToStorage[idx]
