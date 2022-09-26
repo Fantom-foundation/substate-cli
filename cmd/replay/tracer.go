@@ -187,7 +187,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	return nil
 }
 
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation) {
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, blockMap *BlockMap) {
 	files := []*os.File{nil, nil}
 	fn := []string{"GetState.bin", "SetState.bin"}
 	for i := 0; i < NumStateOperations; i++ {
@@ -228,11 +228,12 @@ func traceAction(ctx *cli.Context) error {
 
 	contractDict := NewContractDictionary()
 	storageDict := NewStorageDictionary()
+	blockMap := NewBlockMap()
 	opChannel := make(chan StateOperation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
-	go StateOperationWriter(cctx, cancelChannel, opChannel)
+	go StateOperationWriter(cctx, cancelChannel, opChannel, blockMap)
 	defer func() {
 		// cancel writers
 		(cancel)()        // stop writer
