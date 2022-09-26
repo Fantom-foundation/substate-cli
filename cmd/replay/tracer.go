@@ -274,5 +274,9 @@ func traceAction(ctx *cli.Context) error {
 		}
 	}
 
+	contractDict.Write("contract.dat")
+	storageDict.Write("storage.dat")
+	blockMap.Write("blockmap.dat")
+
 	return err
 }

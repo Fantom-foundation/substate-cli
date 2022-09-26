@@ -37,3 +37,7 @@ func (bm *BlockMap) addFilePositions(block uint64, filePositions []uint64) error
 	bm.blockToFilePositions[block] = filePositions
 	return err
 }
+
+// Write block map to file
+func (bm *BlockMap) Write(string) {
+}
