@@ -53,6 +53,11 @@ type TraceConfig struct {
 // traceTask traces a transaction substate
 func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) error {
 
+	// issue new (pseudo) block operation
+	if tx == 0 {
+		ch <- NewBlockOperation(block)
+	}
+
 	// If requested, skip failed transactions.
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
@@ -197,13 +202,27 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 		}
 		files[i] = f
 	}
+	filePos := make([]uint64, NumStateOperations)
 	defer close(done)
 	var opNum uint64 = 0
 	for {
 		select {
 		case op := <-ch:
-			op.Write(opNum, files)
-			opNum++
+			// BlockOperation is a pseudo state operation
+			// marking the beginning of a new block
+			if op.GetOpId() == BlockOperationID {
+				op.Write(opNum, files)
+				opNum++
+				filePos[op.GetOpId()]++
+			} else {
+				tOp, ok := op.(*BlockOperation)
+				if !ok {
+					log.Fatalf("Transaction downcasting failed")
+				}
+				blockMap.addOperation(tOp.blockNumber, opNum)
+				// TODO: add only for every k positions (not for every block)
+				blockMap.addFilePositions(tOp.blockNumber, filePos)
+			}
 		case <-ctx.Done():
 			if len(ch) == 0 {
 				return
