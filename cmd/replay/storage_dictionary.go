@@ -8,101 +8,106 @@ import (
 	"os"
 )
 
-// Storage limit
+// Entry limit of storage dictionary
 var StorageDictionaryLimit uint32 = math.MaxUint32
 
-// Dictioanary data structure
+// Dictionary data structure encodes/decodes a storage address
+// to a dictionary index or vice versa.
 type StorageDictionary struct {
 	storageToIdx map[common.Hash]uint32 // storage address to index map for encoding
 	idxToStorage []common.Hash          // storage address slice for decoding
 }
 
-// Create new dictionary
+// Init initializes or clears a storage dictionary.
+func (sDict *StorageDictionary) Init() {
+	sDict.storageToIdx = map[common.Hash]uint32{}
+	sDict.idxToStorage = []common.Hash{}
+}
+
+// Create a new dictionary.
 func NewStorageDictionary() *StorageDictionary {
 	p := new(StorageDictionary)
-	p.storageToIdx = map[common.Hash]uint32{}
-	p.idxToStorage = []common.Hash{}
+	p.Init()
 	return p
 }
 
-// Encode an address in the dictionary to an index
-func (cd *StorageDictionary) Encode(key common.Hash) (uint32, error) {
-	var (
-		idx uint32
-		ok  bool
-		err error = nil
-	)
-	if idx, ok = cd.storageToIdx[key]; !ok {
-		idx = uint32(len(cd.idxToStorage))
-		if idx != StorageDictionaryLimit {
-			cd.storageToIdx[key] = idx
-			cd.idxToStorage = append(cd.idxToStorage, key)
-		} else {
-			idx = 0
-			err = errors.New("Storage dictionary exhausted")
+// Encode an storage address to a dictionary index.
+func (sDict *StorageDictionary) Encode(addr common.Hash) (uint32, error) {
+	// find storage address
+	idx, ok := sDict.storageToIdx[addr]
+	if !ok {
+		idx = uint32(len(sDict.idxToStorage))
+		if idx >= StorageDictionaryLimit {
+			return 0, errors.New("Storage dictionary exhausted")
 		}
+		sDict.storageToIdx[addr] = idx
+		sDict.idxToStorage = append(sDict.idxToStorage, addr)
 	}
-	return idx, err
+	return idx, nil
 }
 
-// Decode a dictionary index to an address
-func (cd *StorageDictionary) Decode(idx uint32) (common.Hash, error) {
-	var (
-		key common.Hash
-		err error
-	)
-	if idx < uint32(len(cd.idxToStorage)) {
-		key = cd.idxToStorage[idx]
-		err = nil
+// Decode a dictionary index to an address.
+func (sDict *StorageDictionary) Decode(idx uint32) (common.Hash, error) {
+	if idx < uint32(len(sDict.idxToStorage)) {
+		return sDict.idxToStorage[idx], nil
 	} else {
-		key = common.Hash{}
-		err = errors.New("Index out-of-bound")
+		return common.Hash{}, errors.New("Index out-of-bound")
 	}
-	return key, err
 }
 
-// Write dictionary to a binary file
-func (cd *StorageDictionary) Write(filename string) {
+// Write dictionary to a binary file.
+func (sDict *StorageDictionary) Write(filename string) error {
+	// open storage dictionary file for writing
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	for _, key := range cd.idxToStorage {
-		data := key.Bytes()
+	defer func() {
+		f.Close()
+	}()
+
+	// write all dictionary entries
+	for _, addr := range sDict.idxToStorage {
+		data := addr.Bytes()
 		if _, err := f.Write(data); err != nil {
-			log.Fatal(err)
+			return err
 		}
-	}
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
 	}
 }
 
-// Read dictionary from a binary file
-func (cd *StorageDictionary) Read(filename string) {
-	cd.storageToIdx = map[common.Hash]uint32{}
-	cd.idxToStorage = []common.Hash{}
+// Read dictionary from a binary file.
+func (sDict *StorageDictionary) Read(filename string) error {
+
+	// clear storage dictionary
+	sDict.Init()
+
+	// open storage dictionary file for reading
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDONLY, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	defer func() {
+		f.Close()
+	}()
+
+	// read entries from file
 	data := common.Hash{}.Bytes()
-	for {
+	for ctr := uint32(0); true; ctr++ {
+		// read next entry
 		n, err := f.Read(data)
 		if n == 0 {
 			break
 		} else if n < len(data) || err != nil {
-			log.Fatalf("Storage dictionary file is corrupted")
+			return errors.New("Storage dictionary file/reading is corrupted")
 		}
-		key := common.BytesToHash(data)
-		idx := uint32(len(cd.idxToStorage))
-		if idx == math.MaxUint32 {
-			log.Fatalf("Too many entries in dictionary; file corrupted")
+
+		// encode entry
+		idx, err := sDict.Encode(common.BytesToHash(data))
+		if err != nil {
+			return err
+		} else if idx != ctr {
+			return errors.New("Corrupted storage dictionary file entries")
 		}
-		cd.storageToIdx[key] = uint32(len(cd.idxToStorage))
-		cd.idxToStorage = append(cd.idxToStorage, key)
 	}
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
+	return nil
 }
