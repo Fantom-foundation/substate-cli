@@ -3,7 +3,6 @@ package replay
 import (
 	"errors"
 	"github.com/ethereum/go-ethereum/common"
-	"log"
 	"math"
 	"os"
 )
@@ -24,7 +23,7 @@ func (sDict *StorageDictionary) Init() {
 	sDict.idxToStorage = []common.Hash{}
 }
 
-// Create a new dictionary.
+// Create a new storage dictionary.
 func NewStorageDictionary() *StorageDictionary {
 	p := new(StorageDictionary)
 	p.Init()
@@ -73,11 +72,11 @@ func (sDict *StorageDictionary) Write(filename string) error {
 			return err
 		}
 	}
+	return nil
 }
 
 // Read dictionary from a binary file.
 func (sDict *StorageDictionary) Read(filename string) error {
-
 	// clear storage dictionary
 	sDict.Init()
 
