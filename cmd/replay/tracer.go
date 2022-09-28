@@ -21,6 +21,8 @@ import (
 	cli "gopkg.in/urfave/cli.v1"
 )
 
+const FPosBlockMultiple = 4
+
 // record-trace: substate-cli trace command
 var TraceCommand = cli.Command{
 	Action:    traceAction,
@@ -190,7 +192,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 }
 
 // Read state operations from channel and write them into their files.
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, blockMap *BlockMap) {
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, opIndex *OperationIndex, fposIndex *FilePositionIndex) {
 	defer close(done)
 
 	// open state operations' files
@@ -206,7 +208,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 	// create operation number and file position array
 	var (
 		opNum   = uint64(0)
-		filePos [NumOperations]uint64
+		fpos [NumOperations-1]uint64
 	)
 
 	// read from channel until receiving cancel signal
@@ -221,12 +223,15 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 					log.Fatalf("Block operation downcasting failed")
 				}
 				fmt.Printf("New Block: %v\n", tOp.blockNumber)
-				blockMap.addOperation(tOp.blockNumber, opNum)
+				opIndex.Add(tOp.blockNumber, opNum)
+				if tOp.blockNumber % FPosBlockMultiple == 0  {
+					fposIndex.Add(tOp.blockNumber, fpos)
+				}
 				continue
 			}
 			op.Write(opNum, files)
 			opNum++
-			filePos[op.GetOpId()]++
+			fpos[op.GetOpId()-1]++
 		case <-ctx.Done():
 			if len(ch) == 0 {
 				return
@@ -253,12 +258,13 @@ func traceAction(ctx *cli.Context) error {
 
 	contractDict := NewContractDictionary()
 	storageDict := NewStorageDictionary()
-	blockMap := NewBlockMap()
+	opIndex := NewOperationIndex()
+	fposIndex := NewFilePositionIndex()
 	opChannel := make(chan StateOperation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
-	go StateOperationWriter(cctx, cancelChannel, opChannel, blockMap)
+	go StateOperationWriter(cctx, cancelChannel, opChannel, opIndex, fposIndex)
 	defer func() {
 		// cancel writers
 		(cancel)()        // stop writer
@@ -299,9 +305,11 @@ func traceAction(ctx *cli.Context) error {
 		}
 	}
 
+	// write dictionaries and indexes
 	contractDict.Write("contract-dictionary.dat")
 	storageDict.Write("storage-dictionary.dat")
-	blockMap.Write("block-index.dat")
+	opIndex.Write("operation-index.dat")
+	fposIndex.Write("filepos-index.dat")
 
 	return err
 }
