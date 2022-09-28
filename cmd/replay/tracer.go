@@ -13,7 +13,6 @@ import (
 	"github.com/Fantom-foundation/go-opera/opera"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	//"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -50,15 +49,15 @@ type TraceConfig struct {
 	use_in_memory_db bool
 }
 
-// traceTask traces a transaction substate
+// traceTask generates storage traces for each transaction
 func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) error {
 
 	// issue new (pseudo) block operation
+	// Assumption: every block has a at least transaction zero
 	if tx == 0 {
 		ch <- NewBlockOperation(block)
 	}
 
-	// If requested, skip failed transactions.
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
 	}
@@ -96,6 +95,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 		return h
 	}
 
+	// TODO: drop slower OffTheChain DB??
 	var statedb StateDB
 	if config.use_in_memory_db {
 		statedb = MakeInMemoryStateDB(&inputAlloc)
@@ -148,11 +148,9 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 		statedb.RevertToSnapshot(snapshot)
 		return err
 	}
-
 	if hashError != nil {
 		return hashError
 	}
-
 	if chainConfig.IsByzantium(blockCtx.BlockNumber) {
 		statedb.Finalise(true)
 	} else {
@@ -171,13 +169,12 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 		evmResult.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, msg.Nonce())
 	}
 	evmResult.GasUsed = msgResult.UsedGas
-
 	evmAlloc := statedb.GetSubstatePostAlloc()
 
 	r := outputResult.Equal(evmResult)
 	a := outputAlloc.Equal(evmAlloc)
 	if !(r && a) {
-		fmt.Printf("block: %v Transaction: %v\n", block, tx)
+		fmt.Printf("Block: %v Transaction: %v\n", block, tx)
 		if !r {
 			fmt.Printf("inconsistent output: result\n")
 			printResultDiffSummary(outputResult, evmResult)
@@ -192,47 +189,56 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	return nil
 }
 
+// Read state operations from channel and write them into their files.
 func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, blockMap *BlockMap) {
-	files := []*os.File{nil, nil}
-	fn := []string{"GetState.bin", "SetState.bin"}
-	for i := 0; i < NumStateOperations; i++ {
-		f, err := os.OpenFile(fn[i], os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			log.Fatalf("Cannot open state file %v", i)
-		}
-		files[i] = f
-	}
-	filePos := make([]uint64, NumStateOperations)
 	defer close(done)
-	var opNum uint64 = 0
+
+	// open state operations' files
+	files := make([]*os.File, NumOperations)
+	for id := 1; id < NumOperations; id++ {
+		f, err := os.OpenFile(GetFilename(id), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Fatalf("Cannot open state operation file %v", id)
+		}
+		files[id] = f
+	}
+
+	// create operation number and file position array
+	var (
+		opNum   = uint64(0)
+		filePos [NumOperations]uint64
+	)
+
+	// read from channel until receiving cancel signal
 	for {
 		select {
 		case op := <-ch:
-			// BlockOperation is a pseudo state operation
-			// marking the beginning of a new block
 			if op.GetOpId() == BlockOperationID {
-				op.Write(opNum, files)
-				opNum++
-				filePos[op.GetOpId()]++
-			} else {
+				// BlockOperation is a pseudo state operation
+				// marking the beginning of a new block
 				tOp, ok := op.(*BlockOperation)
 				if !ok {
-					log.Fatalf("Transaction downcasting failed")
+					log.Fatalf("Block operation downcasting failed")
 				}
+				fmt.Printf("New Block: %v\n", tOp.blockNumber)
 				blockMap.addOperation(tOp.blockNumber, opNum)
-				// TODO: add only for every k positions (not for every block)
-				blockMap.addFilePositions(tOp.blockNumber, filePos)
+				continue
 			}
+			op.Write(opNum, files)
+			opNum++
+			filePos[op.GetOpId()]++
 		case <-ctx.Done():
 			if len(ch) == 0 {
 				return
 			}
 		}
 	}
-	for i := 0; i < NumStateOperations; i++ {
-		err := files[i].Close()
+
+	// close state operations' files
+	for id := 1; id < NumOperations; id++ {
+		err := files[id].Close()
 		if err != nil {
-			log.Fatalf("Cannot close state file %v", i)
+			log.Fatalf("Cannot close state operation file %v", id)
 		}
 	}
 }
@@ -293,9 +299,9 @@ func traceAction(ctx *cli.Context) error {
 		}
 	}
 
-	contractDict.Write("contract.dat")
-	storageDict.Write("storage.dat")
-	blockMap.Write("blockmap.dat")
+	contractDict.Write("contract-dictionary.dat")
+	storageDict.Write("storage-dictionary.dat")
+	blockMap.Write("block-index.dat")
 
 	return err
 }

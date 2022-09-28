@@ -4,13 +4,13 @@ import (
 	"errors"
 )
 
-// Block map data structure
+// Block map stores the first operation number of a block and stores
 type BlockMap struct {
-	blockToOperation     map[uint64]uint64   // maps a block number to an operation number
-	blockToFilePositions map[uint64][]uint64 // maps a block number to an array of file positions
+	blockToOperation     map[uint64]uint64   // block number -> operation number
+	blockToFilePositions map[uint64][]uint64 // block number -> array of file positions of operations
 }
 
-// Create new block map
+// Create new block map.
 func NewBlockMap() *BlockMap {
 	p := new(BlockMap)
 	p.blockToOperation = map[uint64]uint64{}

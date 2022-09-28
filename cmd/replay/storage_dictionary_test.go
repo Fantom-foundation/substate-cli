@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Positive Test: Encode an address, and compare whether the decoded address is the same, 
+// Positive Test: Encode an address, and compare whether the decoded address is the same,
 // and its index is zero.
 func TestPositiveStorageDictionarySimple1(t *testing.T) {
 	encodedAddr := common.HexToHash("0xdEcAf0562A19C9fFf21c9cEB476B2858E6f1F272")
@@ -100,7 +100,7 @@ func TestNegativeStorageDictionaryReadFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file")
 	}
-	// write corrupted entry 
+	// write corrupted entry
 	data := []byte("hello")
 	if _, err := f.Write(data); err != nil {
 		t.Fatalf("Failed to write data")
@@ -111,7 +111,7 @@ func TestNegativeStorageDictionaryReadFailure(t *testing.T) {
 	}
 	rDict := NewStorageDictionary()
 	err = rDict.Read(filename)
-	if (err == nil) {
+	if err == nil {
 		t.Fatalf("Failed reporting error")
 	}
 	os.Remove(filename)
@@ -127,12 +127,12 @@ func TestPositiveStorageDictionaryReadWrite(t *testing.T) {
 	idx1, err1 := wDict.Encode(encodedAddr1)
 	idx2, err2 := wDict.Encode(encodedAddr2)
 	err := wDict.Write(filename)
-	if (err != nil) {
+	if err != nil {
 		t.Fatalf("Failed writing file")
 	}
 	rDict := NewStorageDictionary()
 	err = rDict.Read(filename)
-	if (err != nil) {
+	if err != nil {
 		t.Fatalf("Failed writing file")
 	}
 	decodedAddr1, err3 := rDict.Decode(idx1)
