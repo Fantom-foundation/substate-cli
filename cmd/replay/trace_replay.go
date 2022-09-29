@@ -21,7 +21,37 @@ The substate-cli trace-replay command requires two arguments:
 last block of the inclusive range of blocks to replay storage traces.`,
 }
 
-// record-replay: func traceReplayAction for replay command
+func storageDriver(first uint64, last uint64) {
+	// create new dictionaries and indices
+	contractDict := NewContractDictionary()
+	storageDict := NewStorageDictionary()
+	opIndex := NewOperationIndex()
+	fposIndex := NewFilePositionIndex()
+
+	// load dictionaries and indexes from file
+	contractDict.Read("contract-dictionary.dat")
+	storageDict.Read("storage-dictionary.dat")
+	opIndex.Read("operation-index.dat")
+	fposIndex.Read("filepos-index.dat")
+
+	// create index and execution context 
+	eCtx := &ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
+	iCtx := &IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
+
+	// Create dummy statedb to make it compile
+	// TODO: plug-in real DBs and prime DB at block "first"
+	var db *StateDB = nil
+
+	// replay storage trace
+	iter := NewStorageTraceIterator(iCtx, first, last)
+	defer iter.Release()
+	for iter.Next() {
+		op := iter.Value()
+		(*op).Execute(db, eCtx)
+	}
+}
+
+// record-replay: func traceReplayAction for replaying
 func traceReplayAction(ctx *cli.Context) error {
 	var err error
 
