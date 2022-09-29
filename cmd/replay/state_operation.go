@@ -74,15 +74,6 @@ type StateOperation interface {
 	Write(*os.File)           // write operation
 }
 
-// Polymorphic call for writing a writeable state operation to its file
-func Write(so StateOperation, files []*os.File) {
-	// compute index
-	idx := so.GetOpId() - NumPseudoOperations
-
-	// write object to its file
-	so.Write(files[idx])
-}
-
 ////////////////////////////////////////////////////////////
 // Begin Block Operation (Pseudo Operation)
 ////////////////////////////////////////////////////////////
