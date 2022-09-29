@@ -190,14 +190,14 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, opIndex *OperationIndex, fposIndex *FilePositionIndex) {
 	defer close(done)
 
-	// open state operations' files
-	file := make([]*os.File, NumWriteOperations)
+	// open files for writeable state operations
+	files := make([]*os.File, NumWriteOperations)
 	for i := 0; i < NumWriteOperations; i++ {
 		f, err := os.OpenFile(GetFilename(i), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			log.Fatalf("Cannot open state operation file %v", i)
 		}
-		file[i] = f
+		files[i] = f
 	}
 
 	// create operation number and file position array
@@ -234,14 +234,20 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 				}
 				continue
 			}
-			// write state-operation to file
-			op.Write(opNum, file)
+			// set operation number
+			op.GetWriteable().Set(opNum)
+
+			// compute index
+			i := op.GetOpId() - NumPseudoOperations
+
+			// write object to file
+			op.Write(files[i])
 
 			// update operation number
 			opNum++
 
 			// update file-position counters
-			fpos[op.GetOpId()-NumPseudoOperations]++
+			fpos[i]++
 
 		case <-ctx.Done():
 			if len(ch) == 0 {
@@ -252,7 +258,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 
 	// close state operations' files
 	for i := 0; i < NumWriteOperations; i++ {
-		err := file[i].Close()
+		err := files[i].Close()
 		if err != nil {
 			log.Fatalf("Cannot close state operation file %v", i)
 		}

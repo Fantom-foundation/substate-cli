@@ -9,13 +9,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-////////////////////////////////////////////////////////////
-// State Operation Interface
-////////////////////////////////////////////////////////////
-
 // Number of state operations identifiers
 const NumOperations = 4
+
+// Number of pseudo operations that don't write to files
 const NumPseudoOperations = 2
+
+// Number of write operations
 const NumWriteOperations = NumOperations - NumPseudoOperations
 
 // Operation IDs
@@ -33,23 +33,54 @@ var idToFilename = [NumOperations]string{
 	"sop-setstate.dat",
 }
 
-// State-opertion interface
-type StateOperation interface {
-	GetOpId() int             // obtain operation identifier
-	Write(uint64, []*os.File) // write operation
-}
-
-// Polymorphic call for writing a state operation to its file
-func Write(so StateOperation, opNum uint64, file []*os.File) {
-	so.Write(opNum, file)
-}
-
 // Get filename of a state operation that is written to a file
 func GetFilename(i int) string {
 	if i < 0 || i >= NumWriteOperations {
-		log.Fatalf("GetFilename failed; id is out-of-bound")
+		log.Fatalf("GetFilename failed; index is out-of-bound")
 	}
 	return idToFilename[i]
+}
+
+////////////////////////////////////////////////////////////
+// Writeable State Operations
+////////////////////////////////////////////////////////////
+
+// Writeable is the base class of writeable state operations.
+// State operations whose base class is Writeable can
+// be written to disk and have an operation number for
+// sequecing all operations on disk.
+type Writeable struct {
+	OperationNumber uint64 // operation number
+}
+
+// Set operation number.
+func (w *Writeable) Set(opNum uint64) {
+	w.OperationNumber = opNum
+}
+
+// Get operation number.
+func (w *Writeable) Get() uint64 {
+	return w.OperationNumber
+}
+
+////////////////////////////////////////////////////////////
+// State Operation Interface
+////////////////////////////////////////////////////////////
+
+// State-opertion interface
+type StateOperation interface {
+	GetOpId() int             // obtain operation identifier
+	GetWriteable() *Writeable // obtain writeable interface
+	Write(*os.File)           // write operation
+}
+
+// Polymorphic call for writing a writeable state operation to its file
+func Write(so StateOperation, files []*os.File) {
+	// compute index
+	idx := so.GetOpId() - NumPseudoOperations
+
+	// write object to its file
+	so.Write(files[idx])
 }
 
 ////////////////////////////////////////////////////////////
@@ -61,19 +92,24 @@ type BeginBlockOperation struct {
 	blockNumber uint64 // block number
 }
 
+// Return begin-block operation identifier.
+func (bb *BeginBlockOperation) GetOpId() int {
+	return BeginBlockOperationID
+}
+
 // Create a new begin-block operation.
 func NewBeginBlockOperation(blockNumber uint64) *BeginBlockOperation {
 	return &BeginBlockOperation{blockNumber: blockNumber}
 }
 
-// Return begin-block operation identifier.
-func (s *BeginBlockOperation) GetOpId() int {
-	return BeginBlockOperationID
+// Return writeable interface
+func (bb *BeginBlockOperation) GetWriteable() *Writeable {
+	return nil
 }
 
 // Write block operation (should never be invoked).
-func (s *BeginBlockOperation) Write(opNum uint64, files []*os.File) {
-	log.Fatalf("Begin-block operation for block %v attempted to be written", s.blockNumber)
+func (bb *BeginBlockOperation) Write(files *os.File) {
+	log.Fatalf("Begin-block operation for block %v attempted to be written", bb.blockNumber)
 }
 
 ////////////////////////////////////////////////////////////
@@ -85,19 +121,24 @@ type EndBlockOperation struct {
 	blockNumber uint64 // block number
 }
 
+// Return end-block operation identifier.
+func (eb *EndBlockOperation) GetOpId() int {
+	return EndBlockOperationID
+}
+
 // Create a new end-block operation.
 func NewEndBlockOperation(blockNumber uint64) *EndBlockOperation {
 	return &EndBlockOperation{blockNumber: blockNumber}
 }
 
-// Return end-block operation identifier.
-func (s *EndBlockOperation) GetOpId() int {
-	return EndBlockOperationID
+// Return writeable interface
+func (eb *EndBlockOperation) GetWriteable() *Writeable {
+	return nil
 }
 
 // Write end-block operation (should never be invoked).
-func (s *EndBlockOperation) Write(opNum uint64, files []*os.File) {
-	log.Fatalf("End-block operation for block %v attempted to be written", s.blockNumber)
+func (eb *EndBlockOperation) Write(files *os.File) {
+	log.Fatalf("End-block operation for block %v attempted to be written", eb.blockNumber)
 }
 
 ////////////////////////////////////////////////////////////
@@ -106,13 +147,19 @@ func (s *EndBlockOperation) Write(opNum uint64, files []*os.File) {
 
 // GetState datastructure with encoded contract and storage addresses.
 type GetStateOperation struct {
-	contractIndex uint32 // encoded contract address
-	storageIndex  uint32 // encoded storage address
+	Writeable
+	ContractIndex uint32 // encoded contract address
+	StorageIndex  uint32 // encoded storage address
+}
+
+// Return get-state operation identifier.
+func (gso *GetStateOperation) GetOpId() int {
+	return GetStateOperationID
 }
 
 // Create a new get-state operation.
-func NewGetStateOperation(contractIndex uint32, storageIndex uint32) *GetStateOperation {
-	return &GetStateOperation{contractIndex: contractIndex, storageIndex: storageIndex}
+func NewGetStateOperation(ContractIndex uint32, StorageIndex uint32) *GetStateOperation {
+	return &GetStateOperation{ContractIndex: ContractIndex, StorageIndex: StorageIndex}
 }
 
 // Read get-state operation from a file.
@@ -124,26 +171,25 @@ func ReadGetStateOperation(file *os.File) (*GetStateOperation, error) {
 	return data, nil
 }
 
-// Return get-state operation identifier.
-func (s *GetStateOperation) GetOpId() int {
-	return GetStateOperationID
+// Return writeable interface
+func (gso *GetStateOperation) GetWriteable() *Writeable {
+	return &gso.Writeable
 }
 
 // Write a get-state operation.
-func (s *GetStateOperation) Write(opNum uint64, files []*os.File) {
+func (gso *GetStateOperation) Write(f *os.File) {
 	// group information into data slice
-	var data = []any{opNum, s.contractIndex, s.storageIndex}
+	var data = []any{gso.Writeable.Get(), gso.ContractIndex, gso.StorageIndex}
 
 	// write data to file
-	idx := s.GetOpId() - NumPseudoOperations
-	for _, value := range data {
-		if err := binary.Write(files[idx], binary.LittleEndian, value); err != nil {
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// debug message
-	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", opNum, s.contractIndex, s.storageIndex)
+	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", gso.Writeable.Get(), gso.ContractIndex, gso.StorageIndex)
 }
 
 ////////////////////////////////////////////////////////////
@@ -152,14 +198,20 @@ func (s *GetStateOperation) Write(opNum uint64, files []*os.File) {
 
 // SetState datastructure with encoded contract and storage addresses, and value.
 type SetStateOperation struct {
-	contractIndex uint32      // encoded contract address
-	storageIndex  uint32      // encoded storage address
-	value         common.Hash // stored value
+	Writeable
+	ContractIndex uint32      // encoded contract address
+	StorageIndex  uint32      // encoded storage address
+	Value         common.Hash // stored value
+}
+
+// Return set-state identifier
+func (sso *SetStateOperation) GetOpId() int {
+	return SetStateOperationID
 }
 
 // Create a new set-state operation.
-func NewSetStateOperation(contractIndex uint32, storageIndex uint32, value common.Hash) *SetStateOperation {
-	return &SetStateOperation{contractIndex: contractIndex, storageIndex: storageIndex, value: value}
+func NewSetStateOperation(ContractIndex uint32, StorageIndex uint32, value common.Hash) *SetStateOperation {
+	return &SetStateOperation{ContractIndex: ContractIndex, StorageIndex: StorageIndex, Value: value}
 }
 
 // Read set-state operation from a file.
@@ -171,24 +223,23 @@ func ReadSetStateOperation(file *os.File) (*SetStateOperation, error) {
 	return data, nil
 }
 
-// Return set-state identifier
-func (s *SetStateOperation) GetOpId() int {
-	return SetStateOperationID
+// Return writeable interface
+func (sso *SetStateOperation) GetWriteable() *Writeable {
+	return &sso.Writeable
 }
 
 // Write a set-state operation.
-func (s *SetStateOperation) Write(opNum uint64, files []*os.File) {
+func (sso *SetStateOperation) Write(f *os.File) {
 	// group information into data slice
-	var data = []any{opNum, s.contractIndex, s.storageIndex, s.value.Bytes()}
+	var data = []any{sso.Writeable.Get(), sso.ContractIndex, sso.StorageIndex, sso.Value.Bytes()}
 
 	// write data to file
-	idx := s.GetOpId() - NumPseudoOperations
-	for _, value := range data {
-		if err := binary.Write(files[idx], binary.LittleEndian, value); err != nil {
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// debug message
-	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", opNum, s.contractIndex, s.storageIndex, s.value.Hex())
+	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", sso.Writeable.Get(), sso.ContractIndex, sso.StorageIndex, sso.Value.Hex())
 }
