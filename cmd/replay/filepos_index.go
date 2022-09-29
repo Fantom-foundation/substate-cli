@@ -8,12 +8,12 @@ import (
 
 // FilePositionIndex maps a block number to the first operation number in the block.
 type FilePositionIndex struct {
-	blockToFilePos map[uint64][NumOperations-1]uint64 // block number -> operation number
+	blockToFilePos map[uint64][NumWriteOperations]uint64 // block number -> operation number
 }
 
 // Initialize an operation index.
 func (fposIdx *FilePositionIndex) Init() {
-	fposIdx.blockToFilePos = make(map[uint64][NumOperations-1]uint64)
+	fposIdx.blockToFilePos = make(map[uint64][NumWriteOperations]uint64)
 }
 
 // Create new FilePositionIndex data structure.
@@ -24,7 +24,7 @@ func NewFilePositionIndex() *FilePositionIndex {
 }
 
 // Add new entry.
-func (fposIdx *FilePositionIndex) Add(block uint64, filepos [NumOperations-1]uint64) error {
+func (fposIdx *FilePositionIndex) Add(block uint64, filepos [NumWriteOperations]uint64) error {
 	var err error = nil
 	if _, ok := fposIdx.blockToFilePos[block]; ok {
 		err = errors.New("block number already exists")
@@ -33,11 +33,11 @@ func (fposIdx *FilePositionIndex) Add(block uint64, filepos [NumOperations-1]uin
 	return err
 }
 
-// Get operation number.
-func (fposIdx *FilePositionIndex) Get(block uint64) ([NumOperations-1]uint64, error) {
+// Get file positions for a given block number
+func (fposIdx *FilePositionIndex) Get(block uint64) ([NumWriteOperations]uint64, error) {
 	filepos, ok := fposIdx.blockToFilePos[block]
 	if !ok {
-		return [NumOperations-1]uint64{}, errors.New("block number does not exist")
+		return [NumWriteOperations]uint64{}, errors.New("block number does not exist")
 	}
 	return filepos, nil
 }
@@ -84,8 +84,8 @@ func (fposIdx *FilePositionIndex) Read(filename string) error {
 	for {
 		// read next entry
 		var data struct {
-			block     uint64
-			fpos [NumOperations-1] uint64
+			block uint64
+			fpos  [NumWriteOperations]uint64
 		}
 		err := binary.Read(f, binary.LittleEndian, &data)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"os"
 	"strconv"
@@ -53,12 +54,6 @@ type TraceConfig struct {
 
 // traceTask generates storage traces for each transaction
 func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) error {
-
-	// issue new (pseudo) block operation
-	// Assumption: every block has a at least transaction zero
-	if tx == 0 {
-		ch <- NewBlockOperation(block)
-	}
 
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
@@ -196,42 +191,58 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 	defer close(done)
 
 	// open state operations' files
-	files := make([]*os.File, NumOperations)
-	for id := 1; id < NumOperations; id++ {
-		f, err := os.OpenFile(GetFilename(id), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	file := make([]*os.File, NumWriteOperations)
+	for i := 0; i < NumWriteOperations; i++ {
+		f, err := os.OpenFile(GetFilename(i), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
-			log.Fatalf("Cannot open state operation file %v", id)
+			log.Fatalf("Cannot open state operation file %v", i)
 		}
-		files[id] = f
+		file[i] = f
 	}
 
 	// create operation number and file position array
 	var (
-		opNum   = uint64(0)
-		fpos [NumOperations-1]uint64
+		opNum = uint64(0)
+		fpos  [NumWriteOperations]uint64
 	)
 
 	// read from channel until receiving cancel signal
 	for {
 		select {
 		case op := <-ch:
-			if op.GetOpId() == BlockOperationID {
-				// BlockOperation is a pseudo state operation
-				// marking the beginning of a new block
-				tOp, ok := op.(*BlockOperation)
-				if !ok {
-					log.Fatalf("Block operation downcasting failed")
-				}
-				fmt.Printf("New Block: %v\n", tOp.blockNumber)
-				opIndex.Add(tOp.blockNumber, opNum)
-				if tOp.blockNumber % FPosBlockMultiple == 0  {
-					fposIndex.Add(tOp.blockNumber, fpos)
+			if op.GetOpId() < NumPseudoOperations {
+				if op.GetOpId() == BeginBlockOperationID {
+					// retrieve begin-block operation
+					tOp, ok := op.(*BeginBlockOperation)
+					if !ok {
+						log.Fatalf("Begin block operation downcasting failed")
+					}
+					fmt.Printf("New Block: %v\n", tOp.blockNumber)
+
+					// update indexes
+					opIndex.Add(tOp.blockNumber, opNum)
+					if tOp.blockNumber%FPosBlockMultiple == 0 {
+						fposIndex.Add(tOp.blockNumber, fpos)
+					}
+				} else if op.GetOpId() == EndBlockOperationID {
+					// retrieve end-block
+					tOp, ok := op.(*EndBlockOperation)
+					if !ok {
+						log.Fatalf("Block operation downcasting failed")
+					}
+					fmt.Printf("End Block: %v\n", tOp.blockNumber)
 				}
 				continue
 			}
-			op.Write(opNum, files)
+			// write state-operation to file
+			op.Write(opNum, file)
+
+			// update operation number
 			opNum++
-			fpos[op.GetOpId()-1]++
+
+			// update file-position counters
+			fpos[op.GetOpId()-NumPseudoOperations]++
+
 		case <-ctx.Done():
 			if len(ch) == 0 {
 				return
@@ -240,10 +251,10 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 	}
 
 	// close state operations' files
-	for id := 1; id < NumOperations; id++ {
-		err := files[id].Close()
+	for i := 0; i < NumWriteOperations; i++ {
+		err := file[i].Close()
 		if err != nil {
-			log.Fatalf("Cannot close state operation file %v", id)
+			log.Fatalf("Cannot close state operation file %v", i)
 		}
 	}
 }
@@ -297,12 +308,26 @@ func traceAction(ctx *cli.Context) error {
 
 	iter := substate.NewSubstateIterator(first, ctx.Int(substate.WorkersFlag.Name))
 	defer iter.Release()
+	oldBlock := uint64(math.MaxUint64) // set to an infeasible block
 	for iter.Next() {
 		tx := iter.Value()
+		// close off old block with an end-block operation
+		if oldBlock != tx.Block && oldBlock != math.MaxUint64 {
+			opChannel <- NewEndBlockOperation(oldBlock)
+		}
+		oldBlock = tx.Block
+		// open new block with a begin-block operation
+		if tx.Transaction == 0 {
+			opChannel <- NewBeginBlockOperation(tx.Block)
+		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
 		if tx.Block >= last {
 			break
 		}
+	}
+	// close off last block (check whether at least one block was executed)
+	if oldBlock != math.MaxUint64 {
+		opChannel <- NewEndBlockOperation(oldBlock)
 	}
 
 	// write dictionaries and indexes
