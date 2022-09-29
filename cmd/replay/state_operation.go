@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// Number of state operations identifiers
+// Number of state operation identifiers
 const NumOperations = 4
 
 // Number of pseudo operations that don't write to files
@@ -42,25 +42,36 @@ func GetFilename(i int) string {
 }
 
 ////////////////////////////////////////////////////////////
+// Execution Context
+////////////////////////////////////////////////////////////
+
+// ExecutionContext contains the contract/storage dictionaries
+// so that a recorded StateDB operation can be executed.
+type ExecutionContext struct {
+	contractDictionary *ContractDictionary
+	storageDictionary  *StorageDictionary
+}
+
+////////////////////////////////////////////////////////////
 // Writeable State Operations
 ////////////////////////////////////////////////////////////
 
 // Writeable is the base class of writeable state operations.
 // State operations whose base class is Writeable can
-// be written to disk and have an operation number for
-// sequecing all operations on disk.
+// be written to disk and have a sequence number for
+// sequencing operations on disk.
 type Writeable struct {
-	OperationNumber uint64 // operation number
+	SequenceNumber uint64 // operation number
 }
 
 // Set operation number.
 func (w *Writeable) Set(opNum uint64) {
-	w.OperationNumber = opNum
+	w.SequenceNumber = opNum
 }
 
 // Get operation number.
 func (w *Writeable) Get() uint64 {
-	return w.OperationNumber
+	return w.SequenceNumber
 }
 
 ////////////////////////////////////////////////////////////
@@ -69,9 +80,10 @@ func (w *Writeable) Get() uint64 {
 
 // State-opertion interface
 type StateOperation interface {
-	GetOpId() int             // obtain operation identifier
-	GetWriteable() *Writeable // obtain writeable interface
-	Write(*os.File)           // write operation
+	GetOpId() int                              // obtain operation identifier
+	GetWriteable() *Writeable                  // obtain writeable interface
+	Write(*os.File)                            // write operation
+	Execute(*StateDB, *ExecutionContext) error // execute operation
 }
 
 ////////////////////////////////////////////////////////////
@@ -103,6 +115,12 @@ func (bb *BeginBlockOperation) Write(files *os.File) {
 	log.Fatalf("Begin-block operation for block %v attempted to be written", bb.blockNumber)
 }
 
+// Execute state operation
+func (bb *BeginBlockOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
+	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.blockNumber)
+	return nil
+}
+
 ////////////////////////////////////////////////////////////
 // End Block Operation (Pseudo Operation)
 ////////////////////////////////////////////////////////////
@@ -130,6 +148,12 @@ func (eb *EndBlockOperation) GetWriteable() *Writeable {
 // Write end-block operation (should never be invoked).
 func (eb *EndBlockOperation) Write(files *os.File) {
 	log.Fatalf("End-block operation for block %v attempted to be written", eb.blockNumber)
+}
+
+// Execute state operation
+func (eb *EndBlockOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
+	log.Fatalf("End-block operation for block %v attempted to be executed", eb.blockNumber)
+	return nil
 }
 
 ////////////////////////////////////////////////////////////
@@ -183,6 +207,20 @@ func (gso *GetStateOperation) Write(f *os.File) {
 	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", gso.Writeable.Get(), gso.ContractIndex, gso.StorageIndex)
 }
 
+// Execute state operation
+func (gso *GetStateOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
+	contract, cerr := ctx.contractDictionary.Decode(gso.ContractIndex)
+	if cerr != nil {
+		return cerr
+	}
+	storage, serr := ctx.storageDictionary.Decode(gso.StorageIndex)
+	if serr != nil {
+		return serr
+	}
+	(*db).GetState(contract, storage)
+	return nil
+}
+
 ////////////////////////////////////////////////////////////
 // SetState Operation
 ////////////////////////////////////////////////////////////
@@ -233,4 +271,18 @@ func (sso *SetStateOperation) Write(f *os.File) {
 
 	// debug message
 	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", sso.Writeable.Get(), sso.ContractIndex, sso.StorageIndex, sso.Value.Hex())
+}
+
+// Execute state operation
+func (sso *SetStateOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
+	contract, cerr := ctx.contractDictionary.Decode(sso.ContractIndex)
+	if cerr != nil {
+		return cerr
+	}
+	storage, serr := ctx.storageDictionary.Decode(sso.StorageIndex)
+	if serr != nil {
+		return serr
+	}
+	(*db).SetState(contract, storage, sso.Value)
+	return nil
 }
