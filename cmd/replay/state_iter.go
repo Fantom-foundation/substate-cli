@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// IndexContext keeps all index data strutures
+// IndexContext keeps all index data strutures for the iterator.
 type IndexContext struct {
 	FilePositionIndex *FilePositionIndex
 	OperationIndex    *OperationIndex
@@ -74,6 +74,7 @@ func (ti *TraceIterator) Next() bool {
 	}
 }
 
+// Retrieve current state operation of the iterator.
 func (ti *TraceIterator) Value() *StateOperation {
 	return ti.currentOp
 }
