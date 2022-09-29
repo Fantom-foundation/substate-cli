@@ -34,20 +34,20 @@ func storageDriver(first uint64, last uint64) {
 	opIndex.Read("operation-index.dat")
 	fposIndex.Read("filepos-index.dat")
 
-	// create index and execution context 
-	eCtx := &ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
+	// create index and execution context
+	// eCtx := &ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
 	iCtx := &IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
 
 	// Create dummy statedb to make it compile
 	// TODO: plug-in real DBs and prime DB at block "first"
-	var db *StateDB = nil
+	// var db *StateDB = nil
 
 	// replay storage trace
 	iter := NewStorageTraceIterator(iCtx, first, last)
 	defer iter.Release()
 	for iter.Next() {
-		op := iter.Value()
-		(*op).Execute(db, eCtx)
+		// op := iter.Value()
+		// (*op).Execute(db, eCtx)
 	}
 }
 

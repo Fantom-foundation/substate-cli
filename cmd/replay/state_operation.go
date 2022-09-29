@@ -48,8 +48,8 @@ func GetFilename(i int) string {
 // ExecutionContext contains the contract/storage dictionaries
 // so that a recorded StateDB operation can be executed.
 type ExecutionContext struct {
-	contractDictionary *ContractDictionary
-	storageDictionary  *StorageDictionary
+	ContractDictionary *ContractDictionary
+	StorageDictionary  *StorageDictionary
 }
 
 ////////////////////////////////////////////////////////////
@@ -78,12 +78,28 @@ func (w *Writeable) Get() uint64 {
 // State Operation Interface
 ////////////////////////////////////////////////////////////
 
+// TODO: Perhaps have in future two interfaces
+//       1) Pseudo Operations
+//       2) Writeable Operations
+
 // State-opertion interface
 type StateOperation interface {
 	GetOpId() int                              // obtain operation identifier
 	GetWriteable() *Writeable                  // obtain writeable interface
 	Write(*os.File)                            // write operation
 	Execute(*StateDB, *ExecutionContext) error // execute operation
+}
+
+// Read a state operation from file
+func Read(f *os.File, ID int) *StateOperation {
+	var sop StateOperation
+	switch ID + NumPseudoOperations {
+	case GetStateOperationID:
+		sop = ReadGetStateOperation(f)
+	case SetStateOperationID:
+		sop = ReadSetStateOperation(f)
+	}
+	return &sop
 }
 
 ////////////////////////////////////////////////////////////
@@ -178,12 +194,12 @@ func NewGetStateOperation(ContractIndex uint32, StorageIndex uint32) *GetStateOp
 }
 
 // Read get-state operation from a file.
-func ReadGetStateOperation(file *os.File) (*GetStateOperation, error) {
+func ReadGetStateOperation(file *os.File) *GetStateOperation {
 	data := new(GetStateOperation)
 	if err := binary.Read(file, binary.LittleEndian, data); err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
-	return data, nil
+	return data
 }
 
 // Return writeable interface
@@ -209,11 +225,11 @@ func (gso *GetStateOperation) Write(f *os.File) {
 
 // Execute state operation
 func (gso *GetStateOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
-	contract, cerr := ctx.contractDictionary.Decode(gso.ContractIndex)
+	contract, cerr := ctx.ContractDictionary.Decode(gso.ContractIndex)
 	if cerr != nil {
 		return cerr
 	}
-	storage, serr := ctx.storageDictionary.Decode(gso.StorageIndex)
+	storage, serr := ctx.StorageDictionary.Decode(gso.StorageIndex)
 	if serr != nil {
 		return serr
 	}
@@ -244,12 +260,12 @@ func NewSetStateOperation(ContractIndex uint32, StorageIndex uint32, value commo
 }
 
 // Read set-state operation from a file.
-func ReadSetStateOperation(file *os.File) (*SetStateOperation, error) {
+func ReadSetStateOperation(file *os.File) *SetStateOperation {
 	data := new(SetStateOperation)
 	if err := binary.Read(file, binary.LittleEndian, data); err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
-	return data, nil
+	return data
 }
 
 // Return writeable interface
@@ -275,11 +291,11 @@ func (sso *SetStateOperation) Write(f *os.File) {
 
 // Execute state operation
 func (sso *SetStateOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
-	contract, cerr := ctx.contractDictionary.Decode(sso.ContractIndex)
+	contract, cerr := ctx.ContractDictionary.Decode(sso.ContractIndex)
 	if cerr != nil {
 		return cerr
 	}
-	storage, serr := ctx.storageDictionary.Decode(sso.StorageIndex)
+	storage, serr := ctx.StorageDictionary.Decode(sso.StorageIndex)
 	if serr != nil {
 		return serr
 	}
