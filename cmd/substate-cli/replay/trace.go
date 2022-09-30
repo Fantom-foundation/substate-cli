@@ -322,16 +322,14 @@ func traceAction(ctx *cli.Context) error {
 		// close off old block with an end-block operation
 		if oldBlock != tx.Block && oldBlock != math.MaxUint64 {
 			opChannel <- tracer.NewEndBlockOperation(oldBlock)
-		}
-		oldBlock = tx.Block
-		// open new block with a begin-block operation
-		if tx.Transaction == 0 {
+			if tx.Block > last {
+				break
+			}
+			oldBlock = tx.Block
+			// open new block with a begin-block operation
 			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
-		if tx.Block >= last {
-			break
-		}
 	}
 	// close off last block (check whether at least one block was executed)
 	if oldBlock != math.MaxUint64 {
