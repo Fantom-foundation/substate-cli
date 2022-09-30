@@ -93,12 +93,19 @@ type StateOperation interface {
 
 // Read a state operation from file
 func Read(f *os.File, ID int) *StateOperation {
-	var sop StateOperation
+	var (
+		sop StateOperation
+		err error = nil
+	)
+
 	switch ID + NumPseudoOperations {
 	case GetStateOperationID:
-		sop = ReadGetStateOperation(f)
+		sop, err = ReadGetStateOperation(f)
 	case SetStateOperationID:
-		sop = ReadSetStateOperation(f)
+		sop, err = ReadSetStateOperation(f)
+	}
+	if err != nil {
+		log.Fatal(err)
 	}
 	return &sop
 }
@@ -195,12 +202,10 @@ func NewGetStateOperation(ContractIndex uint32, StorageIndex uint32) *GetStateOp
 }
 
 // Read get-state operation from a file.
-func ReadGetStateOperation(file *os.File) *GetStateOperation {
+func ReadGetStateOperation(file *os.File) (*GetStateOperation, error) {
 	data := new(GetStateOperation)
-	if err := binary.Read(file, binary.LittleEndian, data); err != nil {
-		log.Fatal(err)
-	}
-	return data
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
 }
 
 // Return writeable interface
@@ -261,12 +266,10 @@ func NewSetStateOperation(ContractIndex uint32, StorageIndex uint32, value commo
 }
 
 // Read set-state operation from a file.
-func ReadSetStateOperation(file *os.File) *SetStateOperation {
+func ReadSetStateOperation(file *os.File) (*SetStateOperation, error) {
 	data := new(SetStateOperation)
-	if err := binary.Read(file, binary.LittleEndian, data); err != nil {
-		log.Fatal(err)
-	}
-	return data
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
 }
 
 // Return writeable interface
