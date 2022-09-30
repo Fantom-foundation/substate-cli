@@ -3,103 +3,110 @@ package replay
 import (
 	"errors"
 	"github.com/ethereum/go-ethereum/common"
-	"log"
 	"math"
 	"os"
 )
 
-// Dictioanary data structure
+// Entry limit of contract dictionary
+var ContractDictionaryLimit uint32 = math.MaxUint32
+
+// Dictionary data structure encodes/decodes a contract address
+// to a dictionary index or vice versa.
 type ContractDictionary struct {
-	contractToIdx map[common.Address]uint32  // contract to index map for encoding
-	idxToContract []common.Address         // contract address slice for decoding 
+	contractToIdx map[common.Address]uint32 // contract address to index map for encoding
+	idxToContract []common.Address          // contract address slice for decoding
 }
 
-// Create new dictionary
+// Init initializes or clears a contract dictionary.
+func (cDict *ContractDictionary) Init() {
+	cDict.contractToIdx = map[common.Address]uint32{}
+	cDict.idxToContract = []common.Address{}
+}
+
+// Create a new contract dictionary.
 func NewContractDictionary() *ContractDictionary {
 	p := new(ContractDictionary)
-	p.contractToIdx = map[common.Address]uint32{}
-	p.idxToContract = []common.Address{}
+	p.Init()
 	return p
 }
 
-// Encode an address in the dictionary to an index
-func (cd *ContractDictionary) Encode(addr common.Address) (uint32, error) {
-	var (
-		idx uint32
-		ok  bool
-		err error = nil
-	)
-	if idx, ok = cd.contractToIdx[addr]; !ok {
-		idx = uint32(len(cd.idxToContract))
-		if idx != math.MaxUint32 {
-			cd.contractToIdx[addr] = idx
-			cd.idxToContract = append(cd.idxToContract, addr)
-		} else {
-			idx = 0
-			err = errors.New("Contract dictionary exhausted")
+// Encode an contract address to a dictionary index.
+func (cDict *ContractDictionary) Encode(addr common.Address) (uint32, error) {
+	// find contract address
+	idx, ok := cDict.contractToIdx[addr]
+	if !ok {
+		idx = uint32(len(cDict.idxToContract))
+		if idx >= ContractDictionaryLimit {
+			return 0, errors.New("Contract dictionary exhausted")
 		}
+		cDict.contractToIdx[addr] = idx
+		cDict.idxToContract = append(cDict.idxToContract, addr)
 	}
-	return idx, err
+	return idx, nil
 }
 
-// Decode a dictionary index to an address
-func (cd *ContractDictionary) Decode(idx uint32) (common.Address, error) {
-	var (
-		addr common.Address
-		err  error
-	)
-	if idx < uint32(len(cd.idxToContract)) {
-		addr = cd.idxToContract[idx]
-		err = nil
+// Decode a dictionary index to an address.
+func (cDict *ContractDictionary) Decode(idx uint32) (common.Address, error) {
+	if idx < uint32(len(cDict.idxToContract)) {
+		return cDict.idxToContract[idx], nil
 	} else {
-		addr = common.Address{}
-		err = errors.New("Index out-of-bound")
+		return common.Address{}, errors.New("Index out-of-bound")
 	}
-	return addr, err
 }
 
-// Write dictionary to a binary file
-func (cd *ContractDictionary) Write(filename string) {
+// Write dictionary to a binary file.
+func (cDict *ContractDictionary) Write(filename string) error {
+	// open contract dictionary file for writing
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	for _, addr := range cd.idxToContract {
+	defer func() {
+		f.Close()
+	}()
+
+	// write all dictionary entries
+	for _, addr := range cDict.idxToContract {
 		data := addr.Bytes()
 		if _, err := f.Write(data); err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
+	return nil
 }
 
-// Read dictionary from a binary file
-func (cd *ContractDictionary) Read(filename string) {
-	cd.contractToIdx = map[common.Address]uint32{}
-	cd.idxToContract = []common.Address{}
+// Read dictionary from a binary file.
+func (cDict *ContractDictionary) Read(filename string) error {
+	// clear contract dictionary
+	cDict.Init()
+
+	// open contract dictionary file for reading
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDONLY, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	defer func() {
+		f.Close()
+	}()
+
+	// read entries from file
 	data := common.Address{}.Bytes()
-	for {
+	for ctr := uint32(0); true; ctr++ {
+		// read next entry
 		n, err := f.Read(data)
 		if n == 0 {
 			break
 		} else if n < len(data) || err != nil {
-			log.Fatalf("Contract dictionary file is corrupted")
+			return errors.New("Contract dictionary file/reading is corrupted")
 		}
-		addr := common.BytesToAddress(data)
-		idx := uint32(len(cd.idxToContract))
-		if idx == math.MaxUint32 {
-			log.Fatalf("Too many entries in dictionary; file corrupted")
+
+		// encode entry
+		idx, err := cDict.Encode(common.BytesToAddress(data))
+		if err != nil {
+			return err
+		} else if idx != ctr {
+			return errors.New("Corrupted contract dictionary file entries")
 		}
-		cd.contractToIdx[addr] = uint32(len(cd.idxToContract))
-		cd.idxToContract = append(cd.idxToContract, addr)
 	}
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
+	return nil
 }

@@ -41,22 +41,22 @@ func computeStorageSizes(inUpdateSet map[common.Hash]common.Hash, outUpdateSet m
 			if (inValue == common.Hash{} && outValue != common.Hash{}) {
 				// storage increases by one new cell
 				// (cell is empty in in-storage)
-				deltaSize ++
-			} else if(inValue != common.Hash{} && outValue == common.Hash{}) {
+				deltaSize++
+			} else if (inValue != common.Hash{} && outValue == common.Hash{}) {
 				// storage shrinks by one new cell
 				// (cell is empty in out-storage)
-				deltaSize --
+				deltaSize--
 			}
 		} else {
 			// storage increases by one new cell
 			// (cell is not found in in-storage but found in out-storage)
 			if (outValue != common.Hash{}) {
-				deltaSize ++
+				deltaSize++
 			}
 		}
 		// compute update size
 		if (outValue != common.Hash{}) {
-			outUpdateSize ++
+			outUpdateSize++
 		}
 	}
 	for address, inValue := range inUpdateSet {
@@ -64,11 +64,11 @@ func computeStorageSizes(inUpdateSet map[common.Hash]common.Hash, outUpdateSet m
 			// storage shrinks by one cell
 			// (The cell does not exist for an address in in-storage)
 			if (inValue != common.Hash{}) {
-				deltaSize --
+				deltaSize--
 			}
 		}
 		if (inValue != common.Hash{}) {
-			inUpdateSize ++
+			inUpdateSize++
 		}
 	}
 	return deltaSize * int64(wordSize), inUpdateSize * wordSize, outUpdateSize * wordSize
@@ -78,23 +78,25 @@ func computeStorageSizes(inUpdateSet map[common.Hash]common.Hash, outUpdateSet m
 func getStorageUpdateSizeTask(block uint64, tx int, st *substate.Substate, taskPool *substate.SubstateTaskPool) error {
 	timestamp := st.Env.Timestamp
 	for wallet, outputAccount := range st.OutputAlloc {
-		var ( deltaSize int64
-		      inUpdateSize uint64
-		      outUpdateSize uint64 )
+		var (
+			deltaSize     int64
+			inUpdateSize  uint64
+			outUpdateSize uint64
+		)
 		// account exists in both input substate and output substate
 		if inputAccount, found := st.InputAlloc[wallet]; found {
 			deltaSize, inUpdateSize, outUpdateSize = computeStorageSizes(inputAccount.Storage, outputAccount.Storage)
-		// account exists in output substate but not input substate
+			// account exists in output substate but not input substate
 		} else {
 			deltaSize, inUpdateSize, outUpdateSize = computeStorageSizes(map[common.Hash]common.Hash{}, outputAccount.Storage)
 		}
-		fmt.Printf("metric: %v,%v,%v,%v,%v,%v,%v\n",block,timestamp,tx,wallet.Hex(),deltaSize, inUpdateSize, outUpdateSize)
+		fmt.Printf("metric: %v,%v,%v,%v,%v,%v,%v\n", block, timestamp, tx, wallet.Hex(), deltaSize, inUpdateSize, outUpdateSize)
 	}
 	// account exists in input substate but not output substate
 	for wallet, inputAccount := range st.InputAlloc {
 		if _, found := st.OutputAlloc[wallet]; !found {
 			deltaSize, inUpdateSize, outUpdateSize := computeStorageSizes(inputAccount.Storage, map[common.Hash]common.Hash{})
-			fmt.Printf("metric: %v,%v,%v,%v,%v,%v,%v\n",block,timestamp,tx,wallet.Hex(),deltaSize, inUpdateSize, outUpdateSize)
+			fmt.Printf("metric: %v,%v,%v,%v,%v,%v,%v\n", block, timestamp, tx, wallet.Hex(), deltaSize, inUpdateSize, outUpdateSize)
 		}
 	}
 	return nil
@@ -109,9 +111,9 @@ func getStorageUpdateSizeAction(ctx *cli.Context) error {
 	}
 
 	chainID = ctx.Int(ChainIDFlag.Name)
-	fmt.Printf("chain-id: %v\n",chainID)
+	fmt.Printf("chain-id: %v\n", chainID)
 	fmt.Printf("git-date: %v\n", gitDate)
-	fmt.Printf("git-commit: %v\n",gitCommit)
+	fmt.Printf("git-commit: %v\n", gitCommit)
 
 	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
 	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)

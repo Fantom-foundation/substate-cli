@@ -1,9 +1,10 @@
 package replay
 
 import (
-	"binary"
 	"context"
 	"fmt"
+	"log"
+	"math"
 	"math/big"
 	"os"
 	"strconv"
@@ -13,7 +14,6 @@ import (
 	"github.com/Fantom-foundation/go-opera/opera"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	//"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -21,6 +21,8 @@ import (
 	"github.com/ethereum/go-ethereum/substate"
 	cli "gopkg.in/urfave/cli.v1"
 )
+
+const FPosBlockMultiple = 4
 
 // record-trace: substate-cli trace command
 var TraceCommand = cli.Command{
@@ -44,17 +46,15 @@ The substate-cli trace command requires two arguments:
 last block of the inclusive range of blocks to trace transactions.`,
 }
 
-
 type TraceConfig struct {
 	vm_impl          string
 	only_successful  bool
 	use_in_memory_db bool
 }
 
-// traceTask traces a transaction substate
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) error {
+// traceTask generates storage traces for each transaction
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) error {
 
-	// If requested, skip failed transactions.
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
 	}
@@ -92,13 +92,14 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 		return h
 	}
 
+	// TODO: drop slower OffTheChain DB??
 	var statedb StateDB
 	if config.use_in_memory_db {
 		statedb = MakeInMemoryStateDB(&inputAlloc)
 	} else {
 		statedb = MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = NewStateProxyDB(statedb, cdict, sdict, ch)
+	statedb = NewStateProxyDB(statedb, contractDict, storageDict, ch)
 
 	// Apply Message
 	var (
@@ -144,11 +145,9 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 		statedb.RevertToSnapshot(snapshot)
 		return err
 	}
-
 	if hashError != nil {
 		return hashError
 	}
-
 	if chainConfig.IsByzantium(blockCtx.BlockNumber) {
 		statedb.Finalise(true)
 	} else {
@@ -167,13 +166,12 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 		evmResult.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, msg.Nonce())
 	}
 	evmResult.GasUsed = msgResult.UsedGas
-
 	evmAlloc := statedb.GetSubstatePostAlloc()
 
 	r := outputResult.Equal(evmResult)
 	a := outputAlloc.Equal(evmAlloc)
 	if !(r && a) {
-		fmt.Printf("block: %v Transaction: %v\n", block, tx)
+		fmt.Printf("Block: %v Transaction: %v\n", block, tx)
 		if !r {
 			fmt.Printf("inconsistent output: result\n")
 			printResultDiffSummary(outputResult, evmResult)
@@ -188,37 +186,81 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	return nil
 }
 
-// data collection execution context
-type StateOperationWriterContext struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	ch     chan struct{}
-}
-// create new execution context for a data writer
-func NewStateOperationWriterContext() *StateOperationWriterContext {
-	dcc := new(StateOperationWriterContext)
-	dcc.ctx, dcc.cancel = context.WithCancel(context.Background())
-	dcc.ch = make(chan struct{})
-	return dcc
-}
-
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation) {
-	fn := []{"GetState.bin","SetState.bin"}
-	f := make([2]os.File)
-	for i := 0; i < 2; i++ {
-		f[i], _ = os.FileOpen(fn[i], os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	}
+// Read state operations from channel and write them into their files.
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, opIndex *OperationIndex, fposIndex *FilePositionIndex) {
 	defer close(done)
-	var opNum uint64 = 0
+
+	// open files for writeable state operations
+	files := make([]*os.File, NumWriteOperations)
+	for i := 0; i < NumWriteOperations; i++ {
+		f, err := os.OpenFile(GetFilename(i), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Fatalf("Cannot open state operation file %v", i)
+		}
+		files[i] = f
+	}
+
+	// create operation number and file position array
+	var (
+		opNum = uint64(0)
+		fpos  [NumWriteOperations]uint64
+	)
+
+	// read from channel until receiving cancel signal
 	for {
 		select {
-		case op := <- ch:
-			op.Write(opNum, f)
+		case op := <-ch:
+			if op.GetOpId() < NumPseudoOperations {
+				if op.GetOpId() == BeginBlockOperationID {
+					// retrieve begin-block operation
+					tOp, ok := op.(*BeginBlockOperation)
+					if !ok {
+						log.Fatalf("Begin block operation downcasting failed")
+					}
+					fmt.Printf("New Block: %v\n", tOp.blockNumber)
+
+					// update indexes
+					opIndex.Add(tOp.blockNumber, opNum)
+					if tOp.blockNumber%FPosBlockMultiple == 0 {
+						fposIndex.Add(tOp.blockNumber, fpos)
+					}
+				} else if op.GetOpId() == EndBlockOperationID {
+					// retrieve end-block
+					tOp, ok := op.(*EndBlockOperation)
+					if !ok {
+						log.Fatalf("Block operation downcasting failed")
+					}
+					fmt.Printf("End Block: %v\n", tOp.blockNumber)
+				}
+				continue
+			}
+			// set operation number
+			op.GetWriteable().Set(opNum)
+
+			// compute index
+			i := op.GetOpId() - NumPseudoOperations
+
+			// write object to file
+			op.Write(files[i])
+
+			// update operation number
 			opNum++
+
+			// update file-position counters
+			fpos[i]++
+
 		case <-ctx.Done():
 			if len(ch) == 0 {
 				return
 			}
+		}
+	}
+
+	// close state operations' files
+	for i := 0; i < NumWriteOperations; i++ {
+		err := files[i].Close()
+		if err != nil {
+			log.Fatalf("Cannot close state operation file %v", i)
 		}
 	}
 }
@@ -231,18 +273,19 @@ func traceAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli trace command requires exactly 2 arguments")
 	}
 
-	cdict := NewContractDictionary()
-	sdict := NewStorageDictionary()
-	ch := make(chan StateOperation, 10000)
-	
-	var dcc *StateOperationWriterContext
-	dcc = NewStateOperationWriterContext()
-	go StateOperationWriter(dcc.ctx, dcc.ch, ch)
+	contractDict := NewContractDictionary()
+	storageDict := NewStorageDictionary()
+	opIndex := NewOperationIndex()
+	fposIndex := NewFilePositionIndex()
+	opChannel := make(chan StateOperation, 10000)
 
+	cctx, cancel := context.WithCancel(context.Background())
+	cancelChannel := make(chan struct{})
+	go StateOperationWriter(cctx, cancelChannel, opChannel, opIndex, fposIndex)
 	defer func() {
 		// cancel writers
-		(dcc.cancel)() // stop writer
-		<-(dcc.ch)     // wait for writer to finish
+		(cancel)()        // stop writer
+		<-(cancelChannel) // wait for writer to finish
 	}()
 
 	chainID = ctx.Int(ChainIDFlag.Name)
@@ -271,13 +314,33 @@ func traceAction(ctx *cli.Context) error {
 
 	iter := substate.NewSubstateIterator(first, ctx.Int(substate.WorkersFlag.Name))
 	defer iter.Release()
-	for iter.Next(){
+	oldBlock := uint64(math.MaxUint64) // set to an infeasible block
+	for iter.Next() {
 		tx := iter.Value()
-		traceTask(config, tx.Block, tx.Transaction, tx.Substate, cdict, sdict, ch)
+		// close off old block with an end-block operation
+		if oldBlock != tx.Block && oldBlock != math.MaxUint64 {
+			opChannel <- NewEndBlockOperation(oldBlock)
+		}
+		oldBlock = tx.Block
+		// open new block with a begin-block operation
+		if tx.Transaction == 0 {
+			opChannel <- NewBeginBlockOperation(tx.Block)
+		}
+		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
 		if tx.Block >= last {
 			break
 		}
 	}
+	// close off last block (check whether at least one block was executed)
+	if oldBlock != math.MaxUint64 {
+		opChannel <- NewEndBlockOperation(oldBlock)
+	}
+
+	// write dictionaries and indexes
+	contractDict.Write("contract-dictionary.dat")
+	storageDict.Write("storage-dictionary.dat")
+	opIndex.Write("operation-index.dat")
+	fposIndex.Write("filepos-index.dat")
 
 	return err
 }

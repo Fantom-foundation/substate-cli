@@ -9,13 +9,13 @@ import (
 )
 
 type StateProxyDB struct {
-	db           StateDB // state db
-	cdict        *ContractDictionary
-	sdict        *StorageDictionary
-	ch           chan StateOperation
+	db    StateDB // state db
+	cdict *ContractDictionary
+	sdict *StorageDictionary
+	ch    chan StateOperation
 }
 
-func NewStateProxyDB(db StateDB, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) (StateDB) {
+func NewStateProxyDB(db StateDB, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) StateDB {
 	p := new(StateProxyDB)
 	p.db = db
 	p.cdict = cdict
@@ -37,12 +37,12 @@ func (s *StateProxyDB) AddBalance(addr common.Address, amount *big.Int) {
 }
 
 func (s *StateProxyDB) GetBalance(addr common.Address) *big.Int {
-	balance:= s.db.GetBalance(addr)
+	balance := s.db.GetBalance(addr)
 	return balance
 }
 
 func (s *StateProxyDB) GetNonce(addr common.Address) uint64 {
-	nonce:= s.db.GetNonce(addr)
+	nonce := s.db.GetNonce(addr)
 	return nonce
 }
 
@@ -51,7 +51,7 @@ func (s *StateProxyDB) SetNonce(addr common.Address, nonce uint64) {
 }
 
 func (s *StateProxyDB) GetCodeHash(addr common.Address) common.Hash {
-	hash := s.db.GetCodeHash(addr) 
+	hash := s.db.GetCodeHash(addr)
 	return hash
 }
 
@@ -61,7 +61,7 @@ func (s *StateProxyDB) GetCode(addr common.Address) []byte {
 }
 
 func (s *StateProxyDB) SetCode(addr common.Address, code []byte) {
-	s.db.SetCode(addr,code)
+	s.db.SetCode(addr, code)
 }
 
 func (s *StateProxyDB) GetCodeSize(addr common.Address) int {
@@ -78,20 +78,20 @@ func (s *StateProxyDB) SubRefund(gas uint64) {
 }
 
 func (s *StateProxyDB) GetRefund() uint64 {
-	gas := s.db.GetRefund() 
+	gas := s.db.GetRefund()
 	return gas
 }
 
 func (s *StateProxyDB) GetCommittedState(addr common.Address, key common.Hash) common.Hash {
 	value := s.db.GetCommittedState(addr, key)
-	return value 
+	return value
 }
 
 func (s *StateProxyDB) GetState(addr common.Address, key common.Hash) common.Hash {
 	cidx, _ := s.cdict.Encode(addr)
 	sidx, _ := s.sdict.Encode(key)
 	s.ch <- NewGetStateOperation(cidx, sidx)
-	value := s.db.GetState(addr,key) 
+	value := s.db.GetState(addr, key)
 	return value
 }
 
@@ -132,7 +132,7 @@ func (s *StateProxyDB) AddressInAccessList(addr common.Address) bool {
 }
 
 func (s *StateProxyDB) SlotInAccessList(addr common.Address, slot common.Hash) (bool, bool) {
-	addressOk, slotOk := s.db.SlotInAccessList(addr, slot) 
+	addressOk, slotOk := s.db.SlotInAccessList(addr, slot)
 	return addressOk, slotOk
 }
 
@@ -162,7 +162,7 @@ func (s *StateProxyDB) AddPreimage(addr common.Hash, image []byte) {
 }
 
 func (s *StateProxyDB) ForEachStorage(addr common.Address, fn func(common.Hash, common.Hash) bool) error {
-	err:= s.db.ForEachStorage(addr, fn) 
+	err := s.db.ForEachStorage(addr, fn)
 	return err
 }
 
@@ -174,14 +174,14 @@ func (s *StateProxyDB) Finalise(deleteEmptyObjects bool) {
 	s.db.Finalise(deleteEmptyObjects)
 }
 
-func (s *StateProxyDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash{
+func (s *StateProxyDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	return s.db.IntermediateRoot(deleteEmptyObjects)
 }
 
-func (s *StateProxyDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types.Log{
+func (s *StateProxyDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types.Log {
 	return s.db.GetLogs(hash, blockHash)
 }
 
-func (s *StateProxyDB) GetSubstatePostAlloc() substate.SubstateAlloc{
+func (s *StateProxyDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 	return s.db.GetSubstatePostAlloc()
 }
