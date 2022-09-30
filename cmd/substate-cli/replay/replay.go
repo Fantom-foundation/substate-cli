@@ -12,8 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Fantom-foundation/go-opera/evmcore"
-	"github.com/Fantom-foundation/go-opera/opera"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	//"github.com/ethereum/go-ethereum/core/state"
@@ -24,6 +22,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
+	"github.com/Fantom-foundation/go-opera/evmcore"
+	"github.com/Fantom-foundation/go-opera/opera"
+	"github.com/Fantom-foundation/substate-cli/state"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -195,11 +196,11 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 		return h
 	}
 
-	var statedb StateDB
+	var statedb state.StateDB
 	if config.use_in_memory_db {
-		statedb = MakeInMemoryStateDB(&inputAlloc)
+		statedb = state.MakeInMemoryStateDB(&inputAlloc)
 	} else {
-		statedb = MakeOffTheChainStateDB(inputAlloc)
+		statedb = state.MakeOffTheChainStateDB(inputAlloc)
 	}
 
 	// Apply Message

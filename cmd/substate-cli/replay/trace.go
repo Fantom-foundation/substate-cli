@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Fantom-foundation/go-opera/evmcore"
-	"github.com/Fantom-foundation/go-opera/opera"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -19,6 +17,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
+	"github.com/Fantom-foundation/go-opera/evmcore"
+	"github.com/Fantom-foundation/go-opera/opera"
+	"github.com/Fantom-foundation/substate-cli/state"
+	"github.com/Fantom-foundation/substate-cli/tracer"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -53,7 +55,7 @@ type TraceConfig struct {
 }
 
 // traceTask generates storage traces for each transaction
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) error {
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, contractDict *tracer.ContractDictionary, storageDict *tracer.StorageDictionary, ch chan tracer.StateOperation) error {
 
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
@@ -93,13 +95,13 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	}
 
 	// TODO: drop slower OffTheChain DB??
-	var statedb StateDB
+	var statedb state.StateDB
 	if config.use_in_memory_db {
-		statedb = MakeInMemoryStateDB(&inputAlloc)
+		statedb = state.MakeInMemoryStateDB(&inputAlloc)
 	} else {
-		statedb = MakeOffTheChainStateDB(inputAlloc)
+		statedb = state.MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = NewStateProxyDB(statedb, contractDict, storageDict, ch)
+	statedb = tracer.NewStateProxyDB(statedb, contractDict, storageDict, ch)
 
 	// Apply Message
 	var (
@@ -187,13 +189,13 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 }
 
 // Read state operations from channel and write them into their files.
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan StateOperation, opIndex *OperationIndex, fposIndex *FilePositionIndex) {
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, opIndex *tracer.OperationIndex, fposIndex *tracer.FilePositionIndex) {
 	defer close(done)
 
 	// open files for writeable state operations
-	files := make([]*os.File, NumWriteOperations)
-	for i := 0; i < NumWriteOperations; i++ {
-		f, err := os.OpenFile(GetFilename(i), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	files := make([]*os.File, tracer.NumWriteOperations)
+	for i := 0; i < tracer.NumWriteOperations; i++ {
+		f, err := os.OpenFile(tracer.GetFilename(i), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			log.Fatalf("Cannot open state operation file %v", i)
 		}
@@ -203,34 +205,34 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 	// create operation number and file position array
 	var (
 		opNum = uint64(0)
-		fpos  [NumWriteOperations]uint64
+		fpos  [tracer.NumWriteOperations]uint64
 	)
 
 	// read from channel until receiving cancel signal
 	for {
 		select {
 		case op := <-ch:
-			if op.GetOpId() < NumPseudoOperations {
-				if op.GetOpId() == BeginBlockOperationID {
+			if op.GetOpId() < tracer.NumPseudoOperations {
+				if op.GetOpId() == tracer.BeginBlockOperationID {
 					// retrieve begin-block operation
-					tOp, ok := op.(*BeginBlockOperation)
+					tOp, ok := op.(*tracer.BeginBlockOperation)
 					if !ok {
 						log.Fatalf("Begin block operation downcasting failed")
 					}
-					fmt.Printf("New Block: %v\n", tOp.blockNumber)
+					fmt.Printf("New Block: %v\n", tOp.BlockNumber)
 
 					// update indexes
-					opIndex.Add(tOp.blockNumber, opNum)
-					if tOp.blockNumber%FPosBlockMultiple == 0 {
-						fposIndex.Add(tOp.blockNumber, fpos)
+					opIndex.Add(tOp.BlockNumber, opNum)
+					if tOp.BlockNumber % FPosBlockMultiple == 0 {
+						fposIndex.Add(tOp.BlockNumber, fpos)
 					}
-				} else if op.GetOpId() == EndBlockOperationID {
+				} else if op.GetOpId() == tracer.EndBlockOperationID {
 					// retrieve end-block
-					tOp, ok := op.(*EndBlockOperation)
+					tOp, ok := op.(*tracer.EndBlockOperation)
 					if !ok {
 						log.Fatalf("Block operation downcasting failed")
 					}
-					fmt.Printf("End Block: %v\n", tOp.blockNumber)
+					fmt.Printf("End Block: %v\n", tOp.BlockNumber)
 				}
 				continue
 			}
@@ -238,7 +240,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 			op.GetWriteable().Set(opNum)
 
 			// compute index
-			i := op.GetOpId() - NumPseudoOperations
+			i := op.GetOpId() - tracer.NumPseudoOperations
 
 			// write object to file
 			op.Write(files[i])
@@ -257,7 +259,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan State
 	}
 
 	// close state operations' files
-	for i := 0; i < NumWriteOperations; i++ {
+	for i := 0; i < tracer.NumWriteOperations; i++ {
 		err := files[i].Close()
 		if err != nil {
 			log.Fatalf("Cannot close state operation file %v", i)
@@ -273,11 +275,11 @@ func traceAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli trace command requires exactly 2 arguments")
 	}
 
-	contractDict := NewContractDictionary()
-	storageDict := NewStorageDictionary()
-	opIndex := NewOperationIndex()
-	fposIndex := NewFilePositionIndex()
-	opChannel := make(chan StateOperation, 10000)
+	contractDict := tracer.NewContractDictionary()
+	storageDict := tracer.NewStorageDictionary()
+	opIndex := tracer.NewOperationIndex()
+	fposIndex := tracer.NewFilePositionIndex()
+	opChannel := make(chan tracer.StateOperation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
@@ -319,12 +321,12 @@ func traceAction(ctx *cli.Context) error {
 		tx := iter.Value()
 		// close off old block with an end-block operation
 		if oldBlock != tx.Block && oldBlock != math.MaxUint64 {
-			opChannel <- NewEndBlockOperation(oldBlock)
+			opChannel <- tracer.NewEndBlockOperation(oldBlock)
 		}
 		oldBlock = tx.Block
 		// open new block with a begin-block operation
 		if tx.Transaction == 0 {
-			opChannel <- NewBeginBlockOperation(tx.Block)
+			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
 		if tx.Block >= last {
@@ -333,7 +335,7 @@ func traceAction(ctx *cli.Context) error {
 	}
 	// close off last block (check whether at least one block was executed)
 	if oldBlock != math.MaxUint64 {
-		opChannel <- NewEndBlockOperation(oldBlock)
+		opChannel <- tracer.NewEndBlockOperation(oldBlock)
 	}
 
 	// write dictionaries and indexes

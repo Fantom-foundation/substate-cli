@@ -1,4 +1,4 @@
-package replay
+package tracer
 
 import (
 	"math/big"
@@ -6,16 +6,17 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/substate"
+	"github.com/Fantom-foundation/substate-cli/state"
 )
 
 type StateProxyDB struct {
-	db    StateDB // state db
+	db    state.StateDB // state db
 	cdict *ContractDictionary
 	sdict *StorageDictionary
 	ch    chan StateOperation
 }
 
-func NewStateProxyDB(db StateDB, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) StateDB {
+func NewStateProxyDB(db state.StateDB, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) state.StateDB {
 	p := new(StateProxyDB)
 	p.db = db
 	p.cdict = cdict

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	cli "gopkg.in/urfave/cli.v1"
 	"strconv"
+	"github.com/Fantom-foundation/substate-cli/tracer"
 )
 
 // record-replay: substate-cli replay command
@@ -23,10 +24,10 @@ last block of the inclusive range of blocks to replay storage traces.`,
 
 func storageDriver(first uint64, last uint64) {
 	// create new dictionaries and indices
-	contractDict := NewContractDictionary()
-	storageDict := NewStorageDictionary()
-	opIndex := NewOperationIndex()
-	fposIndex := NewFilePositionIndex()
+	contractDict := tracer.NewContractDictionary()
+	storageDict := tracer.NewStorageDictionary()
+	opIndex := tracer.NewOperationIndex()
+	fposIndex := tracer.NewFilePositionIndex()
 
 	// load dictionaries and indexes from file
 	contractDict.Read("contract-dictionary.dat")
@@ -36,14 +37,14 @@ func storageDriver(first uint64, last uint64) {
 
 	// create index and execution context
 	// eCtx := &ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
-	iCtx := &IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
+	iCtx := &tracer.IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
 
 	// Create dummy statedb to make it compile
 	// TODO: plug-in real DBs and prime DB at block "first"
 	// var db *StateDB = nil
 
 	// replay storage trace
-	iter := NewStorageTraceIterator(iCtx, first, last)
+	iter := tracer.NewStorageTraceIterator(iCtx, first, last)
 	defer iter.Release()
 	for iter.Next() {
 		// op := iter.Value()

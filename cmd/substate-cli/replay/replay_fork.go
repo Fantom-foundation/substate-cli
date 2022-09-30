@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
 	"github.com/ethereum/go-ethereum/tests"
+	"github.com/Fantom-foundation/substate-cli/state"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -143,7 +144,7 @@ func replayForkTask(block uint64, tx int, recording *substate.Substate, taskPool
 
 	// Apply Message
 	var (
-		statedb   = MakeOffTheChainStateDB(inputAlloc)
+		statedb   = state.MakeOffTheChainStateDB(inputAlloc)
 		gaspool   = new(core.GasPool)
 		txHash    = common.Hash{0x01}
 		blockHash = common.Hash{0x02}

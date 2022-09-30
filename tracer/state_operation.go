@@ -1,4 +1,4 @@
-package replay
+package tracer
 
 import (
 	"encoding/binary"
@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/Fantom-foundation/substate-cli/state"
 )
 
 // Number of state operation identifiers
@@ -87,7 +88,7 @@ type StateOperation interface {
 	GetOpId() int                              // obtain operation identifier
 	GetWriteable() *Writeable                  // obtain writeable interface
 	Write(*os.File)                            // write operation
-	Execute(*StateDB, *ExecutionContext) error // execute operation
+	Execute(*state.StateDB, *ExecutionContext) error // execute operation
 }
 
 // Read a state operation from file
@@ -108,7 +109,7 @@ func Read(f *os.File, ID int) *StateOperation {
 
 // Block-operation data structure capturing the beginning of a block.
 type BeginBlockOperation struct {
-	blockNumber uint64 // block number
+	BlockNumber uint64 // block number
 }
 
 // Return begin-block operation identifier.
@@ -118,7 +119,7 @@ func (bb *BeginBlockOperation) GetOpId() int {
 
 // Create a new begin-block operation.
 func NewBeginBlockOperation(blockNumber uint64) *BeginBlockOperation {
-	return &BeginBlockOperation{blockNumber: blockNumber}
+	return &BeginBlockOperation{BlockNumber: blockNumber}
 }
 
 // Return writeable interface
@@ -128,12 +129,12 @@ func (bb *BeginBlockOperation) GetWriteable() *Writeable {
 
 // Write block operation (should never be invoked).
 func (bb *BeginBlockOperation) Write(files *os.File) {
-	log.Fatalf("Begin-block operation for block %v attempted to be written", bb.blockNumber)
+	log.Fatalf("Begin-block operation for block %v attempted to be written", bb.BlockNumber)
 }
 
 // Execute state operation
-func (bb *BeginBlockOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
-	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.blockNumber)
+func (bb *BeginBlockOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.BlockNumber)
 	return nil
 }
 
@@ -143,7 +144,7 @@ func (bb *BeginBlockOperation) Execute(db *StateDB, ctx *ExecutionContext) error
 
 // Block-operation data structure capturing the beginning of a block.
 type EndBlockOperation struct {
-	blockNumber uint64 // block number
+	BlockNumber uint64 // block number
 }
 
 // Return end-block operation identifier.
@@ -153,7 +154,7 @@ func (eb *EndBlockOperation) GetOpId() int {
 
 // Create a new end-block operation.
 func NewEndBlockOperation(blockNumber uint64) *EndBlockOperation {
-	return &EndBlockOperation{blockNumber: blockNumber}
+	return &EndBlockOperation{BlockNumber: blockNumber}
 }
 
 // Return writeable interface
@@ -163,12 +164,12 @@ func (eb *EndBlockOperation) GetWriteable() *Writeable {
 
 // Write end-block operation (should never be invoked).
 func (eb *EndBlockOperation) Write(files *os.File) {
-	log.Fatalf("End-block operation for block %v attempted to be written", eb.blockNumber)
+	log.Fatalf("End-block operation for block %v attempted to be written", eb.BlockNumber)
 }
 
 // Execute state operation
-func (eb *EndBlockOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
-	log.Fatalf("End-block operation for block %v attempted to be executed", eb.blockNumber)
+func (eb *EndBlockOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	log.Fatalf("End-block operation for block %v attempted to be executed", eb.BlockNumber)
 	return nil
 }
 
@@ -224,7 +225,7 @@ func (gso *GetStateOperation) Write(f *os.File) {
 }
 
 // Execute state operation
-func (gso *GetStateOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
+func (gso *GetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
 	contract, cerr := ctx.ContractDictionary.Decode(gso.ContractIndex)
 	if cerr != nil {
 		return cerr
@@ -290,7 +291,7 @@ func (sso *SetStateOperation) Write(f *os.File) {
 }
 
 // Execute state operation
-func (sso *SetStateOperation) Execute(db *StateDB, ctx *ExecutionContext) error {
+func (sso *SetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
 	contract, cerr := ctx.ContractDictionary.Decode(sso.ContractIndex)
 	if cerr != nil {
 		return cerr
