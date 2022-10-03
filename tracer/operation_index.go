@@ -3,6 +3,7 @@ package tracer
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"os"
 )
 
@@ -84,14 +85,17 @@ func (oIdx *OperationIndex) Read(filename string) error {
 	for {
 		// read next entry
 		var data struct {
-			block     uint64
-			operation uint64
+			Block     uint64
+			Operation uint64
 		}
 		err := binary.Read(f, binary.LittleEndian, &data)
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return err
 		}
-		err = oIdx.Add(data.block, data.operation)
+		err = oIdx.Add(data.Block, data.Operation)
 		if err != nil {
 			return err
 		}

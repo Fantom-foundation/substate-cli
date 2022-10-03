@@ -98,23 +98,23 @@ func TestNegativeContractDictionaryReadFailure(t *testing.T) {
 	filename := "./test.dict"
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		t.Fatalf("Failed to open file")
+		t.Fatalf("Failed opening file")
 	}
+	defer os.Remove(filename)
 	// write corrupted entry
 	data := []byte("hello")
 	if _, err := f.Write(data); err != nil {
-		t.Fatalf("Failed to write data")
+		t.Fatalf("Failed writing data")
 	}
 	err = f.Close()
 	if err != nil {
-		t.Fatalf("Failed to open file")
+		t.Fatalf("Failed closing file")
 	}
 	rDict := NewContractDictionary()
 	err = rDict.Read(filename)
 	if err == nil {
 		t.Fatalf("Failed reporting error")
 	}
-	os.Remove(filename)
 }
 
 // Positive Test: Encode two addresses, write them to file, and read them from file.
@@ -130,10 +130,11 @@ func TestPositiveContractDictionaryReadWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed writing file")
 	}
+	defer os.Remove(filename)
 	rDict := NewContractDictionary()
 	err = rDict.Read(filename)
 	if err != nil {
-		t.Fatalf("Failed writing file")
+		t.Fatalf("Failed reading file")
 	}
 	decodedAddr1, err3 := rDict.Decode(idx1)
 	decodedAddr2, err4 := rDict.Decode(idx2)
@@ -143,5 +144,4 @@ func TestPositiveContractDictionaryReadWrite(t *testing.T) {
 	if encodedAddr2 != decodedAddr2 || err2 != nil || err4 != nil || idx2 != 1 {
 		t.Fatalf("Encoding/Decoding failed")
 	}
-	os.Remove(filename)
 }

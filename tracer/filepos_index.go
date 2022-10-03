@@ -3,6 +3,7 @@ package tracer
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"os"
 )
 
@@ -84,14 +85,17 @@ func (fposIdx *FilePositionIndex) Read(filename string) error {
 	for {
 		// read next entry
 		var data struct {
-			block uint64
-			fpos  [NumWriteOperations]uint64
+			Block uint64
+			Fpos  [NumWriteOperations]uint64
 		}
 		err := binary.Read(f, binary.LittleEndian, &data)
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return err
 		}
-		err = fposIdx.Add(data.block, data.fpos)
+		err = fposIdx.Add(data.Block, data.Fpos)
 		if err != nil {
 			return err
 		}
