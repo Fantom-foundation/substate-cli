@@ -63,11 +63,11 @@ func TestNegativeContractDictionaryOverflow(t *testing.T) {
 	ContractDictionaryLimit = 1
 	_, err1 := dict.Encode(encodedAddr1)
 	if err1 != nil {
-		t.Fatalf("Failed encoding")
+		t.Fatalf("Failed to encode contract")
 	}
 	_, err2 := dict.Encode(encodedAddr2)
 	if err2 == nil {
-		t.Fatalf("Failed stopping to encode")
+		t.Fatalf("Failed to report error when adding an existing address")
 	}
 	// reset limit
 	ContractDictionaryLimit = math.MaxUint32
@@ -79,7 +79,7 @@ func TestNegativeContractDictionaryDecodingFailure1(t *testing.T) {
 	dict := NewContractDictionary()
 	_, err := dict.Decode(0)
 	if err == nil {
-		t.Fatalf("Failed detecting wrong index for Decode()")
+		t.Fatalf("Failed to detect wrong index for Decode()")
 	}
 }
 
@@ -89,7 +89,7 @@ func TestNegativeContractDictionaryDecodingFailure2(t *testing.T) {
 	dict := NewContractDictionary()
 	_, err := dict.Decode(math.MaxUint32)
 	if err == nil {
-		t.Fatalf("Failed detecting wrong index for Decode()")
+		t.Fatalf("Failed to detect wrong index for Decode()")
 	}
 }
 
@@ -98,22 +98,22 @@ func TestNegativeContractDictionaryReadFailure(t *testing.T) {
 	filename := "./test.dict"
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		t.Fatalf("Failed opening file")
+		t.Fatalf("Failed to open file")
 	}
 	defer os.Remove(filename)
 	// write corrupted entry
 	data := []byte("hello")
 	if _, err := f.Write(data); err != nil {
-		t.Fatalf("Failed writing data")
+		t.Fatalf("Failed to write data")
 	}
 	err = f.Close()
 	if err != nil {
-		t.Fatalf("Failed closing file")
+		t.Fatalf("Failed to close file")
 	}
 	rDict := NewContractDictionary()
 	err = rDict.Read(filename)
 	if err == nil {
-		t.Fatalf("Failed reporting error")
+		t.Fatalf("Failed to report error when reading a corrupted file")
 	}
 }
 
@@ -128,13 +128,13 @@ func TestPositiveContractDictionaryReadWrite(t *testing.T) {
 	idx2, err2 := wDict.Encode(encodedAddr2)
 	err := wDict.Write(filename)
 	if err != nil {
-		t.Fatalf("Failed writing file")
+		t.Fatalf("Failed to write file")
 	}
 	defer os.Remove(filename)
 	rDict := NewContractDictionary()
 	err = rDict.Read(filename)
 	if err != nil {
-		t.Fatalf("Failed reading file")
+		t.Fatalf("Failed to read file")
 	}
 	decodedAddr1, err3 := rDict.Decode(idx1)
 	decodedAddr2, err4 := rDict.Decode(idx2)

@@ -237,7 +237,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 				continue
 			}
 			// set operation number
-			op.GetWriteable().Set(opNum)
+			op.GetWritable().Set(opNum)
 
 			// compute index
 			i := op.GetOpId() - tracer.NumPseudoOperations
@@ -332,6 +332,7 @@ func traceAction(ctx *cli.Context) error {
 			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
+		opChannel <- tracer.NewEndOfTransactionOperation()
 	}
 
 	// write dictionaries and indexes

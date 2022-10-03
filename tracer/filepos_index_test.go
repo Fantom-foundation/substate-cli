@@ -20,11 +20,11 @@ func TestPositiveFilePositionIndexAdd(t *testing.T) {
 	}
 	err1 := fpi.Add(blk1, pos1)
 	if err1 != nil {
-		t.Fatalf("Failed adding new block: %v", err1)
+		t.Fatalf("Failed to add new block: %v", err1)
 	}
 	err2 := fpi.Add(blk2, pos2)
 	if err2 != nil {
-		t.Fatalf("Failed adding new block: %v", err2)
+		t.Fatalf("Failed to add new block: %v", err2)
 	}
 	want := 2
 	have := len(fpi.blockToFilePos)
@@ -44,11 +44,11 @@ func TestNegativeFilePositionIndexAdd(t *testing.T) {
 	}
 	err1 := fpi.Add(blk, pos)
 	if err1 != nil {
-		t.Fatalf("Failed adding new block: %v", err1)
+		t.Fatalf("Failed to add new block: %v", err1)
 	}
 	err2 := fpi.Add(blk, pos)
 	if err2 == nil {
-		t.Fatalf("Expected an error when adding an existing block")
+		t.Fatalf("Failed to report error when adding an existing block")
 	}
 
 	want := 1
@@ -71,7 +71,7 @@ func TestPositiveFilePositionIndexGet(t *testing.T) {
 	fpi.Add(blk, pos)
 	filepos, err := fpi.Get(blk)
 	if err != nil || len(pos) != len(filepos) {
-		t.Fatalf("Failed getting block %v", blk)
+		t.Fatalf("Failed to get block %v", blk)
 	}
 
 	for i := 0; i < NumWriteOperations; i++ {
@@ -93,7 +93,7 @@ func TestNegativeFilePositionIndexGet(t *testing.T) {
 	fpi.Add(blk, pos)
 	_, err := fpi.Get(blk + 1)
 	if err == nil {
-		t.Fatalf("Failed reporting error. Block %v doesn't exist", blk+1)
+		t.Fatalf("Failed to report error. Block %v doesn't exist", blk+1)
 	}
 }
 
@@ -118,16 +118,16 @@ func TestPositiveFilePositionIndexReadWrite(t *testing.T) {
 	err1 := wFpi.Write(filename)
 	defer os.Remove(filename)
 	if err1 != nil {
-		t.Fatalf("Failed writing file. %v", err1)
+		t.Fatalf("Failed to write file. %v", err1)
 	}
 	rFpi := NewFilePositionIndex()
 	err2 := rFpi.Read(filename)
 	if err2 != nil {
-		t.Fatalf("Failed reading file. %v", err2)
+		t.Fatalf("Failed to read file. %v", err2)
 	}
 	filepos1, err3 := rFpi.Get(blk1)
 	if err3 != nil || len(pos1) != len(filepos1) {
-		t.Fatalf("Failed getting block %v. %v", blk1, err3)
+		t.Fatalf("Failed to get block %v with error: %v", blk1, err3)
 	}
 	for i := 0; i < NumWriteOperations; i++ {
 		if pos1[i] != filepos1[i] {
@@ -136,7 +136,7 @@ func TestPositiveFilePositionIndexReadWrite(t *testing.T) {
 	}
 	filepos2, err4 := rFpi.Get(blk2)
 	if err4 != nil || len(pos2) != len(filepos2) {
-		t.Fatalf("Failed getting block %v. %v", blk2, err4)
+		t.Fatalf("Failed to get block %v with error: %v", blk2, err4)
 	}
 	for i := 0; i < NumWriteOperations; i++ {
 		if pos2[i] != filepos2[i] {
@@ -152,21 +152,21 @@ func TestNegativeFilePositionIndexWrite(t *testing.T) {
 	filename := "./test.dict"
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		t.Fatalf("Failed opening file")
+		t.Fatalf("Failed to open file")
 	}
 	defer os.Remove(filename)
 	// write corrupted entry
 	data := []byte("hello")
 	if _, err := f.Write(data); err != nil {
-		t.Fatalf("Failed writing data")
+		t.Fatalf("Failed to write data")
 	}
 	err = f.Close()
 	if err != nil {
-		t.Fatalf("Failed closing file")
+		t.Fatalf("Failed to close file")
 	}
 	fpi := NewFilePositionIndex()
 	err = fpi.Read(filename)
 	if err == nil {
-		t.Fatalf("Failed reporting error")
+		t.Fatalf("Failed to report error")
 	}
 }

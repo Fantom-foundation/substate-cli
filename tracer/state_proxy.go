@@ -10,17 +10,17 @@ import (
 )
 
 type StateProxyDB struct {
-	db    state.StateDB // state db
-	cdict *ContractDictionary
-	sdict *StorageDictionary
-	ch    chan StateOperation
+	db           state.StateDB // state db
+	contractDict *ContractDictionary
+	storageDict  *StorageDictionary
+	ch           chan StateOperation
 }
 
-func NewStateProxyDB(db state.StateDB, cdict *ContractDictionary, sdict *StorageDictionary, ch chan StateOperation) state.StateDB {
+func NewStateProxyDB(db state.StateDB, contractDict *ContractDictionary, storageDict *StorageDictionary, ch chan StateOperation) state.StateDB {
 	p := new(StateProxyDB)
 	p.db = db
-	p.cdict = cdict
-	p.sdict = sdict
+	p.contractDict = contractDict
+	p.storageDict = storageDict
 	p.ch = ch
 	return p
 }
@@ -84,22 +84,25 @@ func (s *StateProxyDB) GetRefund() uint64 {
 }
 
 func (s *StateProxyDB) GetCommittedState(addr common.Address, key common.Hash) common.Hash {
+	contractIdx, _ := s.contractDict.Encode(addr)
+	storageIdx, _ := s.storageDict.Encode(key)
+	s.ch <- NewGetCommittedStateOperation(contractIdx, storageIdx)
 	value := s.db.GetCommittedState(addr, key)
 	return value
 }
 
 func (s *StateProxyDB) GetState(addr common.Address, key common.Hash) common.Hash {
-	cidx, _ := s.cdict.Encode(addr)
-	sidx, _ := s.sdict.Encode(key)
-	s.ch <- NewGetStateOperation(cidx, sidx)
+	contractIdx, _ := s.contractDict.Encode(addr)
+	storageIdx, _ := s.storageDict.Encode(key)
+	s.ch <- NewGetStateOperation(contractIdx, storageIdx)
 	value := s.db.GetState(addr, key)
 	return value
 }
 
 func (s *StateProxyDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
-	cidx, _ := s.cdict.Encode(addr)
-	sidx, _ := s.sdict.Encode(key)
-	s.ch <- NewSetStateOperation(cidx, sidx, value)
+	contractIdx, _ := s.contractDict.Encode(addr)
+	storageIdx, _ := s.storageDict.Encode(key)
+	s.ch <- NewSetStateOperation(contractIdx, storageIdx, value)
 	s.db.SetState(addr, key, value)
 }
 
@@ -146,10 +149,12 @@ func (s *StateProxyDB) AddSlotToAccessList(addr common.Address, slot common.Hash
 }
 
 func (s *StateProxyDB) RevertToSnapshot(snapshot int) {
+	s.ch <- NewRevertToSnapshotOperation(snapshot)
 	s.db.RevertToSnapshot(snapshot)
 }
 
 func (s *StateProxyDB) Snapshot() int {
+	s.ch <- NewSnapshotOperation()
 	snapshot := s.db.Snapshot()
 	return snapshot
 }
@@ -185,4 +190,8 @@ func (s *StateProxyDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types
 
 func (s *StateProxyDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 	return s.db.GetSubstatePostAlloc()
+}
+
+func (s *StateProxyDB) EndOfTransaction() {
+	s.ch <- NewEndOfTransactionOperation()
 }

@@ -60,7 +60,7 @@ func (ti *TraceIterator) Next() bool {
 		if ti.nextOp[i] != nil {
 			if minIdx == -1 {
 				minIdx = i
-			} else if (*ti.nextOp[i]).GetWriteable().Get() < (*ti.nextOp[minIdx]).GetWriteable().Get() {
+			} else if (*ti.nextOp[i]).GetWritable().Get() < (*ti.nextOp[minIdx]).GetWritable().Get() {
 				minIdx = i
 			}
 		}

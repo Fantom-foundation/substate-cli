@@ -10,14 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// Number of state operation identifiers
-const NumOperations = 4
-
 // Number of pseudo operations that don't write to files
 const NumPseudoOperations = 2
-
-// Number of write operations
-const NumWriteOperations = NumOperations - NumPseudoOperations
 
 // Operation IDs
 // Pseudo Operations (not stored on file)
@@ -25,13 +19,27 @@ const BeginBlockOperationID = 0
 const EndBlockOperationID = 1
 
 // Stored Operations
-const GetStateOperationID = 2
-const SetStateOperationID = 3
+const GetStateOperationID = NumPseudoOperations
+const SetStateOperationID = NumPseudoOperations + 1
+const GetCommittedStateOperationID = NumPseudoOperations + 2
+const SnapshotOperationID = NumPseudoOperations + 3
+const RevertToSnapshotOperationID = NumPseudoOperations + 4
+const EndOfTransactionOperationID = NumPseudoOperations + 5 //last
+
+// Number of state operation identifiers
+const NumOperations = EndOfTransactionOperationID + 1 //last op + 1
+
+// Number of write operations
+const NumWriteOperations = NumOperations - NumPseudoOperations
 
 // State operations' filenames
 var idToFilename = [NumOperations]string{
 	"sop-getstate.dat",
 	"sop-setstate.dat",
+	"sop-getcommittedstate.dat",
+	"sop-snapshot.dat",
+	"sop-reverttosnapshot.dat",
+	"sop-endoftransaction.dat",
 }
 
 // Get filename of a state operation that is written to a file
@@ -54,24 +62,24 @@ type ExecutionContext struct {
 }
 
 ////////////////////////////////////////////////////////////
-// Writeable State Operations
+// Writable State Operations
 ////////////////////////////////////////////////////////////
 
-// Writeable is the base class of writeable state operations.
-// State operations whose base class is Writeable can
+// Writable is the base class of writeable state operations.
+// State operations whose base class is Writable can
 // be written to disk and have a sequence number for
 // sequencing operations on disk.
-type Writeable struct {
+type Writable struct {
 	SequenceNumber uint64 // operation number
 }
 
 // Set operation number.
-func (w *Writeable) Set(opNum uint64) {
+func (w *Writable) Set(opNum uint64) {
 	w.SequenceNumber = opNum
 }
 
 // Get operation number.
-func (w *Writeable) Get() uint64 {
+func (w *Writable) Get() uint64 {
 	return w.SequenceNumber
 }
 
@@ -81,12 +89,12 @@ func (w *Writeable) Get() uint64 {
 
 // TODO: Perhaps have in future two interfaces
 //       1) Pseudo Operations
-//       2) Writeable Operations
+//       2) Writable Operations
 
 // State-opertion interface
 type StateOperation interface {
 	GetOpId() int                                    // obtain operation identifier
-	GetWriteable() *Writeable                        // obtain writeable interface
+	GetWritable() *Writable                          // obtain writeable interface
 	Write(*os.File)                                  // write operation
 	Execute(*state.StateDB, *ExecutionContext) error // execute operation
 }
@@ -103,6 +111,14 @@ func Read(f *os.File, ID int) *StateOperation {
 		sop, err = ReadGetStateOperation(f)
 	case SetStateOperationID:
 		sop, err = ReadSetStateOperation(f)
+	case GetCommittedStateOperationID:
+		sop, err = ReadGetCommittedStateOperation(f)
+	case SnapshotOperationID:
+		sop, err = ReadSnapshotOperation(f)
+	case RevertToSnapshotOperationID:
+		sop, err = ReadRevertToSnapshotOperation(f)
+	case EndOfTransactionOperationID:
+		sop, err = ReadEndOfTransactionOperation(f)
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -130,7 +146,7 @@ func NewBeginBlockOperation(blockNumber uint64) *BeginBlockOperation {
 }
 
 // Return writeable interface
-func (bb *BeginBlockOperation) GetWriteable() *Writeable {
+func (bb *BeginBlockOperation) GetWritable() *Writable {
 	return nil
 }
 
@@ -165,7 +181,7 @@ func NewEndBlockOperation(blockNumber uint64) *EndBlockOperation {
 }
 
 // Return writeable interface
-func (eb *EndBlockOperation) GetWriteable() *Writeable {
+func (eb *EndBlockOperation) GetWritable() *Writable {
 	return nil
 }
 
@@ -186,13 +202,13 @@ func (eb *EndBlockOperation) Execute(db *state.StateDB, ctx *ExecutionContext) e
 
 // GetState datastructure with encoded contract and storage addresses.
 type GetStateOperation struct {
-	Writeable
+	Writable
 	ContractIndex uint32 // encoded contract address
 	StorageIndex  uint32 // encoded storage address
 }
 
 // Return get-state operation identifier.
-func (gso *GetStateOperation) GetOpId() int {
+func (sop *GetStateOperation) GetOpId() int {
 	return GetStateOperationID
 }
 
@@ -209,33 +225,33 @@ func ReadGetStateOperation(file *os.File) (*GetStateOperation, error) {
 }
 
 // Return writeable interface
-func (gso *GetStateOperation) GetWriteable() *Writeable {
-	return &gso.Writeable
+func (sop *GetStateOperation) GetWritable() *Writable {
+	return &sop.Writable
 }
 
 // Write a get-state operation.
-func (gso *GetStateOperation) Write(f *os.File) {
+func (sop *GetStateOperation) Write(f *os.File) {
 	// group information into data slice
-	var data = []any{gso.Writeable.Get(), gso.ContractIndex, gso.StorageIndex}
+	var data = []any{sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex}
 
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatal(err)
+			log.Fatalf("GetStateOperation: %v", err)
 		}
 	}
 
 	// debug message
-	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", gso.Writeable.Get(), gso.ContractIndex, gso.StorageIndex)
+	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex)
 }
 
 // Execute state operation
-func (gso *GetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
-	contract, cerr := ctx.ContractDictionary.Decode(gso.ContractIndex)
+func (sop *GetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
 	if cerr != nil {
 		return cerr
 	}
-	storage, serr := ctx.StorageDictionary.Decode(gso.StorageIndex)
+	storage, serr := ctx.StorageDictionary.Decode(sop.StorageIndex)
 	if serr != nil {
 		return serr
 	}
@@ -249,14 +265,14 @@ func (gso *GetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) 
 
 // SetState datastructure with encoded contract and storage addresses, and value.
 type SetStateOperation struct {
-	Writeable
+	Writable
 	ContractIndex uint32      // encoded contract address
 	StorageIndex  uint32      // encoded storage address
 	Value         common.Hash // stored value
 }
 
 // Return set-state identifier
-func (sso *SetStateOperation) GetOpId() int {
+func (sop *SetStateOperation) GetOpId() int {
 	return SetStateOperationID
 }
 
@@ -273,36 +289,262 @@ func ReadSetStateOperation(file *os.File) (*SetStateOperation, error) {
 }
 
 // Return writeable interface
-func (sso *SetStateOperation) GetWriteable() *Writeable {
-	return &sso.Writeable
+func (sop *SetStateOperation) GetWritable() *Writable {
+	return &sop.Writable
 }
 
 // Write a set-state operation.
-func (sso *SetStateOperation) Write(f *os.File) {
+func (sop *SetStateOperation) Write(f *os.File) {
 	// group information into data slice
-	var data = []any{sso.Writeable.Get(), sso.ContractIndex, sso.StorageIndex, sso.Value.Bytes()}
+	var data = []any{sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex, sop.Value.Bytes()}
 
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatal(err)
+			log.Fatalf("SetStateOperation: %v", err)
 		}
 	}
 
 	// debug message
-	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", sso.Writeable.Get(), sso.ContractIndex, sso.StorageIndex, sso.Value.Hex())
+	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex, sop.Value.Hex())
 }
 
 // Execute state operation
-func (sso *SetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
-	contract, cerr := ctx.ContractDictionary.Decode(sso.ContractIndex)
+func (sop *SetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
 	if cerr != nil {
 		return cerr
 	}
-	storage, serr := ctx.StorageDictionary.Decode(sso.StorageIndex)
+	storage, serr := ctx.StorageDictionary.Decode(sop.StorageIndex)
 	if serr != nil {
 		return serr
 	}
-	(*db).SetState(contract, storage, sso.Value)
+	(*db).SetState(contract, storage, sop.Value)
+	return nil
+}
+
+////////////////////////////////////////////////////////////
+// GetCommittedState Operation
+////////////////////////////////////////////////////////////
+
+// GetCommittedState datastructure with encoded contract and storage addresses.
+type GetCommittedStateOperation struct {
+	Writable
+	ContractIndex uint32 // encoded contract address
+	StorageIndex  uint32 // encoded storage address
+}
+
+// Return get commited state operation identifier.
+func (sop *GetCommittedStateOperation) GetOpId() int {
+	return GetCommittedStateOperationID
+}
+
+// Create a new get commited state operation.
+func NewGetCommittedStateOperation(ContractIndex uint32, StorageIndex uint32) *GetCommittedStateOperation {
+	return &GetCommittedStateOperation{ContractIndex: ContractIndex, StorageIndex: StorageIndex}
+}
+
+// Read get commited state operation from a file.
+func ReadGetCommittedStateOperation(file *os.File) (*GetCommittedStateOperation, error) {
+	data := new(GetCommittedStateOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (sop *GetCommittedStateOperation) GetWritable() *Writable {
+	return &sop.Writable
+}
+
+// Write a get commited state operation.
+func (sop *GetCommittedStateOperation) Write(f *os.File) {
+	// group information into data slice
+	var data = []any{sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex}
+
+	// write data to file
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
+			log.Fatalf("GetCommittedStateOperation: %v", err)
+		}
+	}
+
+	// debug message
+	fmt.Printf("GetCommittedState: operation number: %v\t contract idx: %v\t storage idx: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex)
+}
+
+// Execute state operation
+func (sop *GetCommittedStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
+	if cerr != nil {
+		return cerr
+	}
+	storage, serr := ctx.StorageDictionary.Decode(sop.StorageIndex)
+	if serr != nil {
+		return serr
+	}
+	(*db).GetCommittedState(contract, storage)
+	return nil
+}
+
+////////////////////////////////////////////////////////////
+// Snapshot Operation
+////////////////////////////////////////////////////////////
+
+// Snapshot datastructure with returned snapshot id
+type SnapshotOperation struct {
+	Writable
+}
+
+// Return snapshot operation identifier.
+func (sop *SnapshotOperation) GetOpId() int {
+	return SnapshotOperationID
+}
+
+// Create a new snapshot operation.
+func NewSnapshotOperation() *SnapshotOperation {
+	return &SnapshotOperation{}
+}
+
+// Read snapshot operation from a file.
+func ReadSnapshotOperation(file *os.File) (*SnapshotOperation, error) {
+	data := new(SnapshotOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (sop *SnapshotOperation) GetWritable() *Writable {
+	return &sop.Writable
+}
+
+// Write a snapshot operation.
+func (sop *SnapshotOperation) Write(f *os.File) {
+	// group information into data slice
+	var data = []any{sop.Writable.Get()}
+
+	// write data to file
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
+			log.Fatalf("SnapshotOperation: %v", err)
+		}
+	}
+
+	// debug message
+	fmt.Printf("Snapshot: operation number: %v\n", sop.Writable.Get())
+}
+
+// Execute state operation
+func (sop *SnapshotOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	(*db).Snapshot()
+	return nil
+}
+
+////////////////////////////////////////////////////////////
+// RevertToSnapshot Operation
+////////////////////////////////////////////////////////////
+
+// RevertToSnapshot datastructure with returned snapshot id
+type RevertToSnapshotOperation struct {
+	Writable
+	SnapshotID int
+}
+
+// Return snapshot operation identifier.
+func (sop *RevertToSnapshotOperation) GetOpId() int {
+	return RevertToSnapshotOperationID
+}
+
+// Create a new snapshot operation.
+func NewRevertToSnapshotOperation(SnapshotID int) *RevertToSnapshotOperation {
+	return &RevertToSnapshotOperation{SnapshotID: SnapshotID}
+}
+
+// Read snapshot operation from a file.
+func ReadRevertToSnapshotOperation(file *os.File) (*RevertToSnapshotOperation, error) {
+	var data struct {
+		Writable
+		SnapshotID int32
+	}
+	err := binary.Read(file, binary.LittleEndian, &data)
+	rtso := &RevertToSnapshotOperation{Writable: data.Writable, SnapshotID: int(data.SnapshotID)}
+	return rtso, err
+}
+
+// Return writeable interface
+func (sop *RevertToSnapshotOperation) GetWritable() *Writable {
+	return &sop.Writable
+}
+
+// Write a snapshot operation.
+func (sop *RevertToSnapshotOperation) Write(f *os.File) {
+	// group information into data slice
+	var data = []any{sop.Writable.Get(), int32(sop.SnapshotID)}
+
+	// write data to file
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
+			log.Fatalf("RevertToSnapshotOperation: %v", err)
+		}
+	}
+
+	// debug message
+	fmt.Printf("RevertToSnapshot: operation number: %v\t snapshot id: %v\n", sop.Writable.Get(), sop.SnapshotID)
+}
+
+// Execute state operation
+func (sop *RevertToSnapshotOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+	(*db).RevertToSnapshot(int(sop.SnapshotID))
+	return nil
+}
+
+////////////////////////////////////////////////////////////
+// End of transaction Operation
+////////////////////////////////////////////////////////////
+
+// EndOfTransaction datastructure with returned snapshot id
+type EndOfTransactionOperation struct {
+	Writable
+}
+
+// Return snapshot operation identifier.
+func (sop *EndOfTransactionOperation) GetOpId() int {
+	return EndOfTransactionOperationID
+}
+
+// Create a new snapshot operation.
+func NewEndOfTransactionOperation() *EndOfTransactionOperation {
+	return &EndOfTransactionOperation{}
+}
+
+// Read snapshot operation from a file.
+func ReadEndOfTransactionOperation(file *os.File) (*EndOfTransactionOperation, error) {
+	data := new(EndOfTransactionOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (sop *EndOfTransactionOperation) GetWritable() *Writable {
+	return &sop.Writable
+}
+
+// Write a snapshot operation.
+func (sop *EndOfTransactionOperation) Write(f *os.File) {
+	// group information into data slice
+	var data = []any{sop.Writable.Get()}
+
+	// write data to file
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
+			log.Fatalf("EndOfTransactionOperation: %v", err)
+		}
+	}
+
+	// debug message
+	fmt.Printf("EndOfTransaction: operation number: %v\n", sop.Writable.Get())
+}
+
+// Execute state operation
+func (sop *EndOfTransactionOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
 	return nil
 }

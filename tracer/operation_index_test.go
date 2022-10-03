@@ -16,11 +16,11 @@ func TestPositiveOperationIndexAdd(t *testing.T) {
 
 	err1 := opIdx.Add(blk1, pos1)
 	if err1 != nil {
-		t.Fatalf("Failed adding new block: %v", err1)
+		t.Fatalf("Failed to add new block: %v", err1)
 	}
 	err2 := opIdx.Add(blk2, pos2)
 	if err2 != nil {
-		t.Fatalf("Failed adding new block: %v", err2)
+		t.Fatalf("Failed to add new block: %v", err2)
 	}
 	want := 2
 	have := len(opIdx.blockToOperation)
@@ -37,11 +37,11 @@ func TestNegativeOperationIndexAdd(t *testing.T) {
 
 	err1 := opIdx.Add(blk, pos)
 	if err1 != nil {
-		t.Fatalf("Failed adding new block: %v", err1)
+		t.Fatalf("Failed to add new block: %v", err1)
 	}
 	err2 := opIdx.Add(blk, pos)
 	if err2 == nil {
-		t.Fatalf("Expected an error when adding an existing block")
+		t.Fatalf("Expected an error when to add an existing block")
 	}
 
 	want := 1
@@ -61,7 +61,7 @@ func TestPositiveOperationIndexGet(t *testing.T) {
 	opIdx.Add(blk, pos)
 	opnum, err := opIdx.Get(blk)
 	if err != nil {
-		t.Fatalf("Failed getting block %va", blk)
+		t.Fatalf("Failed to get block %va", blk)
 	}
 	if pos != opnum {
 		t.Fatalf("Operation number mismatched")
@@ -77,7 +77,7 @@ func TestNegativeOperationIndexGet(t *testing.T) {
 	opIdx.Add(blk, pos)
 	_, err := opIdx.Get(blk + 1)
 	if err == nil {
-		t.Fatalf("Failed reporting error. Block %v doesn't exist", blk+1)
+		t.Fatalf("Failed to report error. Block %v doesn't exist", blk+1)
 	}
 }
 
@@ -95,16 +95,16 @@ func TestPositiveOperationIndexReadWrite(t *testing.T) {
 	err1 := wOpIdx.Write(filename)
 	defer os.Remove(filename)
 	if err1 != nil {
-		t.Fatalf("Failed writing file. %v", err1)
+		t.Fatalf("Failed to write file. %v", err1)
 	}
 	rOpIdx := NewOperationIndex()
 	err2 := rOpIdx.Read(filename)
 	if err2 != nil {
-		t.Fatalf("Failed reading file. %v", err2)
+		t.Fatalf("Failed to read file. %v", err2)
 	}
 	opnum, err3 := rOpIdx.Get(blk)
 	if err3 != nil {
-		t.Fatalf("Failed getting block %v. %v", blk, err3)
+		t.Fatalf("Failed to get block %v. %v", blk, err3)
 	}
 	if pos != opnum {
 		t.Fatalf("Operation number mismatched")
@@ -123,15 +123,15 @@ func TestNegativeOperationIndexWrite(t *testing.T) {
 	// write corrupted entry
 	data := []byte("hello")
 	if _, err := f.Write(data); err != nil {
-		t.Fatalf("Failed writing data")
+		t.Fatalf("Failed to write data")
 	}
 	err = f.Close()
 	if err != nil {
-		t.Fatalf("Failed closing file")
+		t.Fatalf("Failed to close file")
 	}
 	opIdx := NewOperationIndex()
 	err = opIdx.Read(filename)
 	if err == nil {
-		t.Fatalf("Failed reporting error")
+		t.Fatalf("Failed to report error when reading a corrupted file")
 	}
 }
