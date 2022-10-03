@@ -1,4 +1,3 @@
-
 package tracer
 
 import (
@@ -8,7 +7,7 @@ import (
 
 // Add()
 // Positive Test: Add a new set of file positions and compare the size of position index map
-func TestPositiveFilePositionIndexAdd (t *testing.T) {
+func TestPositiveFilePositionIndexAdd(t *testing.T) {
 	var blk1 uint64 = 1
 	var blk2 uint64 = 2
 	var pos1 [NumWriteOperations]uint64
@@ -19,11 +18,11 @@ func TestPositiveFilePositionIndexAdd (t *testing.T) {
 		pos1[i] = uint64(i)
 		pos2[i] = uint64(i) + NumWriteOperations
 	}
-	err1 := fpi.Add(blk1,pos1)
+	err1 := fpi.Add(blk1, pos1)
 	if err1 != nil {
 		t.Fatalf("Failed adding new block: %v", err1)
 	}
-	err2 := fpi.Add(blk2,pos2)
+	err2 := fpi.Add(blk2, pos2)
 	if err2 != nil {
 		t.Fatalf("Failed adding new block: %v", err2)
 	}
@@ -35,7 +34,7 @@ func TestPositiveFilePositionIndexAdd (t *testing.T) {
 }
 
 // Negative Test: Add a duplicate set of indices and compare whether the values are added twice
-func TestNegativeFilePositionIndexAdd (t *testing.T) {
+func TestNegativeFilePositionIndexAdd(t *testing.T) {
 	var blk uint64 = 1
 	var pos [NumWriteOperations]uint64
 	fpi := NewFilePositionIndex()
@@ -43,11 +42,11 @@ func TestNegativeFilePositionIndexAdd (t *testing.T) {
 	for i := 0; i < NumWriteOperations; i++ {
 		pos[i] = uint64(i)
 	}
-	err1 := fpi.Add(blk,pos)
+	err1 := fpi.Add(blk, pos)
 	if err1 != nil {
 		t.Fatalf("Failed adding new block: %v", err1)
 	}
-	err2 := fpi.Add(blk,pos)
+	err2 := fpi.Add(blk, pos)
 	if err2 == nil {
 		t.Fatalf("Expected an error when adding an existing block")
 	}
@@ -59,10 +58,9 @@ func TestNegativeFilePositionIndexAdd (t *testing.T) {
 	}
 }
 
-
 // Get()
 // Positive Test: Get file positions from FilePositionIndex and compare index postions
-func TestPositiveFilePositionIndexGet (t *testing.T) {
+func TestPositiveFilePositionIndexGet(t *testing.T) {
 	var blk uint64 = 1
 	var pos [NumWriteOperations]uint64
 	fpi := NewFilePositionIndex()
@@ -70,7 +68,7 @@ func TestPositiveFilePositionIndexGet (t *testing.T) {
 		pos[i] = uint64(i)
 	}
 
-	fpi.Add(blk,pos)
+	fpi.Add(blk, pos)
 	filepos, err := fpi.Get(blk)
 	if err != nil || len(pos) != len(filepos) {
 		t.Fatalf("Failed getting block %v", blk)
@@ -84,7 +82,7 @@ func TestPositiveFilePositionIndexGet (t *testing.T) {
 }
 
 // Negative Test: Get file positions of a block whcih is not in FilePositionIndex
-func TestNegativeFilePositionIndexGet (t *testing.T) {
+func TestNegativeFilePositionIndexGet(t *testing.T) {
 	var blk uint64 = 1
 	var pos [NumWriteOperations]uint64
 	fpi := NewFilePositionIndex()
@@ -92,17 +90,17 @@ func TestNegativeFilePositionIndexGet (t *testing.T) {
 		pos[i] = uint64(i)
 	}
 
-	fpi.Add(blk,pos)
+	fpi.Add(blk, pos)
 	_, err := fpi.Get(blk + 1)
 	if err == nil {
-		t.Fatalf("Failed reporting error. Block %v doesn't exist", blk + 1)
+		t.Fatalf("Failed reporting error. Block %v doesn't exist", blk+1)
 	}
 }
 
 // Read and Write()
 // Positive Tetst: Write a set of postion index to a binary file and read from it.
 // Compare whether indices are the same.
-func TestPositiveFilePositionIndexReadWrite (t *testing.T) {
+func TestPositiveFilePositionIndexReadWrite(t *testing.T) {
 	var blk1 uint64 = 1
 	var blk2 uint64 = 2
 	var pos1 [NumWriteOperations]uint64
@@ -114,8 +112,8 @@ func TestPositiveFilePositionIndexReadWrite (t *testing.T) {
 		pos1[i] = uint64(i)
 		pos2[i] = uint64(i) + NumWriteOperations
 	}
-	wFpi.Add(blk1,pos1)
-	wFpi.Add(blk2,pos2)
+	wFpi.Add(blk1, pos1)
+	wFpi.Add(blk2, pos2)
 
 	err1 := wFpi.Write(filename)
 	defer os.Remove(filename)
@@ -148,9 +146,9 @@ func TestPositiveFilePositionIndexReadWrite (t *testing.T) {
 
 }
 
-// Positive Tetst: Create 
+// Positive Tetst: Create
 // Negative Tetst: Write a corrupted file and read from it.
-func TestNegativeFilePositionIndexWrite (t *testing.T) {
+func TestNegativeFilePositionIndexWrite(t *testing.T) {
 	filename := "./test.dict"
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {

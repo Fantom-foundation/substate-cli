@@ -320,8 +320,10 @@ func traceAction(ctx *cli.Context) error {
 	for iter.Next() {
 		tx := iter.Value()
 		// close off old block with an end-block operation
-		if oldBlock != tx.Block && oldBlock != math.MaxUint64 {
-			opChannel <- tracer.NewEndBlockOperation(oldBlock)
+		if oldBlock != tx.Block {
+			if oldBlock != math.MaxUint64 {
+				opChannel <- tracer.NewEndBlockOperation(oldBlock)
+			}
 			if tx.Block > last {
 				break
 			}
@@ -330,10 +332,6 @@ func traceAction(ctx *cli.Context) error {
 			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
-	}
-	// close off last block (check whether at least one block was executed)
-	if oldBlock != math.MaxUint64 {
-		opChannel <- tracer.NewEndBlockOperation(oldBlock)
 	}
 
 	// write dictionaries and indexes

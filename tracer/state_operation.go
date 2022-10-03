@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/Fantom-foundation/substate-cli/state"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Number of state operation identifiers
@@ -85,9 +85,9 @@ func (w *Writeable) Get() uint64 {
 
 // State-opertion interface
 type StateOperation interface {
-	GetOpId() int                              // obtain operation identifier
-	GetWriteable() *Writeable                  // obtain writeable interface
-	Write(*os.File)                            // write operation
+	GetOpId() int                                    // obtain operation identifier
+	GetWriteable() *Writeable                        // obtain writeable interface
+	Write(*os.File)                                  // write operation
 	Execute(*state.StateDB, *ExecutionContext) error // execute operation
 }
 

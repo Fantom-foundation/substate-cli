@@ -3,10 +3,10 @@ package tracer
 import (
 	"math/big"
 
+	"github.com/Fantom-foundation/substate-cli/state"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/substate"
-	"github.com/Fantom-foundation/substate-cli/state"
 )
 
 type StateProxyDB struct {

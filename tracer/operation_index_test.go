@@ -1,4 +1,3 @@
-
 package tracer
 
 import (
@@ -8,18 +7,18 @@ import (
 
 // Add()
 // Positive Test: Add a new set of blocks and compare the size of index map
-func TestPositiveOperationIndexAdd (t *testing.T) {
+func TestPositiveOperationIndexAdd(t *testing.T) {
 	var blk1 uint64 = 1
 	var blk2 uint64 = 2
 	var pos1 uint64 = 0
 	var pos2 uint64 = 1
 	opIdx := NewOperationIndex()
 
-	err1 := opIdx.Add(blk1,pos1)
+	err1 := opIdx.Add(blk1, pos1)
 	if err1 != nil {
 		t.Fatalf("Failed adding new block: %v", err1)
 	}
-	err2 := opIdx.Add(blk2,pos2)
+	err2 := opIdx.Add(blk2, pos2)
 	if err2 != nil {
 		t.Fatalf("Failed adding new block: %v", err2)
 	}
@@ -31,16 +30,16 @@ func TestPositiveOperationIndexAdd (t *testing.T) {
 }
 
 // Negative Test: Add a duplicate block and compare whether the values are added twice
-func TestNegativeOperationIndexAdd (t *testing.T) {
+func TestNegativeOperationIndexAdd(t *testing.T) {
 	var blk uint64 = 1
 	var pos uint64 = 0
 	opIdx := NewOperationIndex()
 
-	err1 := opIdx.Add(blk,pos)
+	err1 := opIdx.Add(blk, pos)
 	if err1 != nil {
 		t.Fatalf("Failed adding new block: %v", err1)
 	}
-	err2 := opIdx.Add(blk,pos)
+	err2 := opIdx.Add(blk, pos)
 	if err2 == nil {
 		t.Fatalf("Expected an error when adding an existing block")
 	}
@@ -52,15 +51,14 @@ func TestNegativeOperationIndexAdd (t *testing.T) {
 	}
 }
 
-
 // Get()
 // Positive Test: Get file positions from OperationIndex and compare index postions
-func TestPositiveOperationIndexGet (t *testing.T) {
+func TestPositiveOperationIndexGet(t *testing.T) {
 	var blk uint64 = 1
 	var pos uint64 = 8
 	opIdx := NewOperationIndex()
 
-	opIdx.Add(blk,pos)
+	opIdx.Add(blk, pos)
 	opnum, err := opIdx.Get(blk)
 	if err != nil {
 		t.Fatalf("Failed getting block %va", blk)
@@ -71,28 +69,28 @@ func TestPositiveOperationIndexGet (t *testing.T) {
 }
 
 // Negative Test: Get file positions of a block whcih is not in OperationIndex
-func TestNegativeOperationIndexGet (t *testing.T) {
+func TestNegativeOperationIndexGet(t *testing.T) {
 	var blk uint64 = 1
 	var pos uint64 = 8
 	opIdx := NewOperationIndex()
 
-	opIdx.Add(blk,pos)
+	opIdx.Add(blk, pos)
 	_, err := opIdx.Get(blk + 1)
 	if err == nil {
-		t.Fatalf("Failed reporting error. Block %v doesn't exist", blk + 1)
+		t.Fatalf("Failed reporting error. Block %v doesn't exist", blk+1)
 	}
 }
 
 // Read and Write()
 // Positive Tetst: Write a set of postion index to a binary file and read from it.
 // Compare whether indices are the same.
-func TestPositiveOperationIndexReadWrite (t *testing.T) {
+func TestPositiveOperationIndexReadWrite(t *testing.T) {
 	var blk uint64 = 1
 	var pos uint64 = 3
 	filename := "./operation_index_test.dat"
 
 	wOpIdx := NewOperationIndex()
-	wOpIdx.Add(blk,pos)
+	wOpIdx.Add(blk, pos)
 
 	err1 := wOpIdx.Write(filename)
 	defer os.Remove(filename)
@@ -113,9 +111,9 @@ func TestPositiveOperationIndexReadWrite (t *testing.T) {
 	}
 }
 
-// Positive Tetst: Create 
+// Positive Tetst: Create
 // Negative Tetst: Write a corrupted file and read from it.
-func TestNegativeOperationIndexWrite (t *testing.T) {
+func TestNegativeOperationIndexWrite(t *testing.T) {
 	filename := "./operation_index_test.dat"
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
