@@ -1,0 +1,6 @@
+[submodule "go-ethereum-substate"]
+	path = go-ethereum-substate
+	url = https://github.com/Fantom-foundation/go-ethereum-substate
+[submodule "go-opera-substate"]
+	path = go-opera-substate
+	url = https://github.com/Fantom-foundation/go-opera-substate
