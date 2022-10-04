@@ -5,7 +5,6 @@ go 1.18
 require (
 	github.com/Fantom-foundation/go-opera v1.1.1-rc.2
 	github.com/ethereum/go-ethereum v1.10.8
-	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
@@ -39,8 +38,8 @@ require (
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 )
 
-replace github.com/ethereum/go-ethereum => github.com/Fantom-foundation/go-ethereum-substate v1.1.0
+replace github.com/ethereum/go-ethereum => ./go-ethereum-substate
 
-replace github.com/Fantom-foundation/go-opera => github.com/Fantom-foundation/go-opera-substate v1.0.0
+replace github.com/Fantom-foundation/go-opera => ./go-opera-substate
 
 replace github.com/dvyukov/go-fuzz => github.com/guzenok/go-fuzz v0.0.0-20210103140116-f9104dfb626f
