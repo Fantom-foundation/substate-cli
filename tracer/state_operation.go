@@ -32,6 +32,9 @@ const NumOperations = EndOfTransactionOperationID + 1 //last op + 1
 // Number of write operations
 const NumWriteOperations = NumOperations - NumPseudoOperations
 
+// Output directory
+var TraceDir string = "./"
+
 // State operations' filenames
 var idToFilename = [NumOperations]string{
 	"sop-getstate.dat",
@@ -47,7 +50,7 @@ func GetFilename(i int) string {
 	if i < 0 || i >= NumWriteOperations {
 		log.Fatalf("GetFilename failed; index is out-of-bound")
 	}
-	return idToFilename[i]
+	return TraceDir + idToFilename[i]
 }
 
 ////////////////////////////////////////////////////////////

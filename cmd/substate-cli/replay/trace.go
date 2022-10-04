@@ -7,7 +7,6 @@ import (
 	"math"
 	"math/big"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,6 +25,11 @@ import (
 
 const FPosBlockMultiple = 4
 
+var TraceDirectoryFlag = cli.StringFlag{
+	Name: "trace-dir",
+	Usage: "set storage trace's output directory",
+	Value: "./",
+}
 // record-trace: substate-cli trace command
 var TraceCommand = cli.Command{
 	Action:    traceAction,
@@ -39,6 +43,7 @@ var TraceCommand = cli.Command{
 		substate.SkipCreateTxsFlag,
 		substate.SubstateDirFlag,
 		ChainIDFlag,
+		TraceDirectoryFlag,
 	},
 	Description: `
 The substate-cli trace command requires two arguments:
@@ -291,17 +296,11 @@ func traceAction(ctx *cli.Context) error {
 	}()
 
 	chainID = ctx.Int(ChainIDFlag.Name)
+	tracer.TraceDir = ctx.String(TraceDirectoryFlag.Name) + "/"
 
-	first, ferr := strconv.ParseUint(ctx.Args().Get(0), 10, 64)
-	last, lerr := strconv.ParseUint(ctx.Args().Get(1), 10, 64)
-	if ferr != nil || lerr != nil {
-		return fmt.Errorf("substate-cli trace: error in parsing parameters: block number not an integer")
-	}
-	if first < 0 || last < 0 {
-		return fmt.Errorf("substate-cli trace: error: block number must be greater than 0")
-	}
-	if first > last {
-		return fmt.Errorf("substate-cli trace: error: first block has larger number than last block")
+	first, last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	if argErr != nil {
+		return argErr
 	}
 
 	substate.SetSubstateFlags(ctx)

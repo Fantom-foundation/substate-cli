@@ -57,7 +57,7 @@ func (cDict *ContractDictionary) Decode(idx uint32) (common.Address, error) {
 // Write dictionary to a binary file.
 func (cDict *ContractDictionary) Write(filename string) error {
 	// open contract dictionary file for writing
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(TraceDir + filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (cDict *ContractDictionary) Read(filename string) error {
 	cDict.Init()
 
 	// open contract dictionary file for reading
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDONLY, 0644)
+	f, err := os.OpenFile(TraceDir + filename, os.O_CREATE|os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}

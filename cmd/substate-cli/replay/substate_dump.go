@@ -3,7 +3,6 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/substate"
 	cli "gopkg.in/urfave/cli.v1"
@@ -16,6 +15,7 @@ var SubstateDumpCommand = cli.Command{
 	Usage:     "returns content in substates in json format",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
+		substate.WorkersFlag,
 		substate.SubstateDirFlag,
 	},
 	Description: `
@@ -36,18 +36,20 @@ func substateDumpTask(block uint64, tx int, recording *substate.Substate, taskPo
 	outputAlloc := recording.OutputAlloc
 	outputResult := recording.Result
 
-	fmt.Printf("block: %v Transaction: %v\n", block, tx)
+	out := fmt.Sprintf("block: %v Transaction: %v\n", block, tx)
 	var jbytes []byte
 	jbytes, _ = json.MarshalIndent(inputAlloc, "", " ")
-	fmt.Printf("Recorded input substate:\n%s\n", jbytes)
+	out += fmt.Sprintf("Recorded input substate:\n%s\n", jbytes)
 	jbytes, _ = json.MarshalIndent(inputEnv, "", " ")
-	fmt.Printf("Recorded input environmnet:\n%s\n", jbytes)
+	out += fmt.Sprintf("Recorded input environmnet:\n%s\n", jbytes)
 	jbytes, _ = json.MarshalIndent(inputMessage, "", " ")
-	fmt.Printf("Recorded input message:\n%s\n", jbytes)
+	out += fmt.Sprintf("Recorded input message:\n%s\n", jbytes)
 	jbytes, _ = json.MarshalIndent(outputAlloc, "", " ")
-	fmt.Printf("Recorded output substate:\n%s\n", jbytes)
+	out += fmt.Sprintf("Recorded output substate:\n%s\n", jbytes)
 	jbytes, _ = json.MarshalIndent(outputResult, "", " ")
-	fmt.Printf("Recorded output result:\n%s\n", jbytes)
+	out += fmt.Sprintf("Recorded output result:\n%s\n", jbytes)
+
+	fmt.Println(out)
 
 	return nil
 }
@@ -60,24 +62,16 @@ func substateDumpAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli dump cammand requires exactly 2 arguments")
 	}
 
-	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
-	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)
-	if ferr != nil || lerr != nil {
-		return fmt.Errorf("substate-cli dump: error in parsing parameters: block number not an integer")
-	}
-	if first < 0 || last < 0 {
-		return fmt.Errorf("substate-cli dump: error: block number must be greater than 0")
-	}
-	if first > last {
-		return fmt.Errorf("substate-cli dump: error: first block has larger number than last block")
+	first, last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	if argErr != nil {
+		return argErr
 	}
 
 	substate.SetSubstateFlags(ctx)
 	substate.OpenSubstateDBReadOnly()
 	defer substate.CloseSubstateDB()
 
-	taskPool := substate.NewSubstateTaskPool("substate-cli dump", substateDumpTask, uint64(first), uint64(last), ctx)
-	taskPool.Workers = 1 //force sequential order
+	taskPool := substate.NewSubstateTaskPool("substate-cli dump", substateDumpTask, first, last, ctx)
 	err = taskPool.Execute()
 	return err
 }

@@ -3,7 +3,7 @@ package replay
 import (
 	"fmt"
 	cli "gopkg.in/urfave/cli.v1"
-	"strconv"
+
 	"github.com/Fantom-foundation/substate-cli/tracer"
 )
 
@@ -56,20 +56,15 @@ func storageDriver(first uint64, last uint64) {
 func traceReplayAction(ctx *cli.Context) error {
 	var err error
 
+	tracer.TraceDir = ctx.String(TraceDirectoryFlag.Name) + "/"
+
 	if len(ctx.Args()) != 2 {
 		return fmt.Errorf("substate-cli replay-trace command requires exactly 2 arguments")
 	}
 
-	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
-	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)
-	if ferr != nil || lerr != nil {
-		return fmt.Errorf("substate-cli replay: error in parsing parameters: block number not an integer")
-	}
-	if first < 0 || last < 0 {
-		return fmt.Errorf("substate-cli replay-trace: error: block number must be greater than 0")
-	}
-	if first > last {
-		return fmt.Errorf("substate-cli replay-trace: error: first block has larger number than last block")
+	_ , _, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	if argErr != nil {
+		return argErr
 	}
 
 	return err
