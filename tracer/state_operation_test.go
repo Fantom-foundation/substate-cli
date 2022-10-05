@@ -1,7 +1,6 @@
 package tracer
 
 import (
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"os"
 	"testing"
@@ -11,28 +10,27 @@ import (
 // operation filenames.
 func TestPositiveGetFilename(t *testing.T) {
 	fn := GetFilename(0)
-	fmt.Printf("f: %v\n", fn)
-	if fn != "sop-getstate.dat" {
+	if fn != "./sop-getstate.dat" {
 		t.Fatalf("GetFilename(0) failed; returns %v", fn)
 	}
 	fn = GetFilename(1)
-	if fn != "sop-setstate.dat" {
+	if fn != "./sop-setstate.dat" {
 		t.Fatalf("GetFilename(1) failed; returns %v", fn)
 	}
 	fn = GetFilename(2)
-	if fn != "sop-getcommittedstate.dat" {
+	if fn != "./sop-getcommittedstate.dat" {
 		t.Fatalf("GetFilename(2) failed; returns %v", fn)
 	}
 	fn = GetFilename(3)
-	if fn != "sop-snapshot.dat" {
+	if fn != "./sop-snapshot.dat" {
 		t.Fatalf("GetFilename(3) failed; returns %v", fn)
 	}
 	fn = GetFilename(4)
-	if fn != "sop-reverttosnapshot.dat" {
+	if fn != "./sop-reverttosnapshot.dat" {
 		t.Fatalf("GetFilename(4) failed; returns %v", fn)
 	}
 	fn = GetFilename(5)
-	if fn != "sop-endoftransaction.dat" {
+	if fn != "./sop-endoftransaction.dat" {
 		t.Fatalf("GetFilename(5) failed; returns %v", fn)
 	}
 }
@@ -191,7 +189,6 @@ func TestPositiveWriteReadGetCommittedState(t *testing.T) {
 	}
 }
 
-
 // Positive Test: Write/read test for SnapshotOperation
 func TestPositiveWriteReadSnapshotState(t *testing.T) {
 	filename := "./snapshot_test.dat"
@@ -250,14 +247,14 @@ func TestPositiveWriteReadRevertToSnapshot(t *testing.T) {
 		t.Fatalf("Failed to open file for writing")
 	}
 	// write first object
-	var sop = &RevertToSnapshotOperation{SnapshotID: 31}
-	sop.GetWritable().Set(1001)
-	sop.Write(f)
+	sop1 := NewRevertToSnapshotOperation(31)
+	sop1.GetWritable().Set(1001)
+	sop1.Write(f)
 	defer os.Remove(filename)
 	// write second object
-	sop.SnapshotID = 200
-	sop.GetWritable().Set(1010)
-	sop.Write(f)
+	sop2 := NewRevertToSnapshotOperation(200)
+	sop2.GetWritable().Set(1010)
+	sop2.Write(f)
 	err = f.Close()
 	if err != nil {
 		t.Fatalf("Failed to close file for writing")
@@ -273,7 +270,7 @@ func TestPositiveWriteReadRevertToSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read from file. %v", err)
 	}
-	if data.GetWritable().Get() != 1001 || data.SnapshotID != 31 {
+	if data.GetWritable().Get() != 1001 || data.SnapshotID != sop1.SnapshotID {
 		t.Fatalf("Failed comparison")
 	}
 	// read second object & compare
@@ -281,7 +278,7 @@ func TestPositiveWriteReadRevertToSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read from file")
 	}
-	if data.GetWritable().Get() != 1010 || data.SnapshotID != 200 {
+	if data.GetWritable().Get() != 1010 || data.SnapshotID != sop2.SnapshotID {
 		t.Fatalf("Failed comparison")
 	}
 	err = f.Close()
@@ -290,8 +287,8 @@ func TestPositiveWriteReadRevertToSnapshot(t *testing.T) {
 	}
 }
 
-// Positive Test: Write/read test for EndOfTransactionOperation
-func TestPositiveWriteReadEndOfTransactionState(t *testing.T) {
+// Positive Test: Write/read test for EndTransactionOperation
+func TestPositiveWriteReadEndTransactionState(t *testing.T) {
 	filename := "./end_of_transaction_test.dat"
 
 	//  write two test object to file
@@ -300,7 +297,7 @@ func TestPositiveWriteReadEndOfTransactionState(t *testing.T) {
 		t.Fatalf("Failed to open file for writing")
 	}
 	// write first object
-	var sop = &EndOfTransactionOperation{}
+	var sop = &EndTransactionOperation{}
 	sop.GetWritable().Set(1001)
 	sop.Write(f)
 	defer os.Remove(filename)
@@ -317,7 +314,7 @@ func TestPositiveWriteReadEndOfTransactionState(t *testing.T) {
 		t.Fatalf("Failed to open file for reading")
 	}
 	// read first object & compare
-	data, err := ReadEndOfTransactionOperation(f)
+	data, err := ReadEndTransactionOperation(f)
 	if err != nil {
 		t.Fatalf("Failed to read from file")
 	}
@@ -325,7 +322,7 @@ func TestPositiveWriteReadEndOfTransactionState(t *testing.T) {
 		t.Fatalf("Failed comparison")
 	}
 	// read second object & compare
-	data, err = ReadEndOfTransactionOperation(f)
+	data, err = ReadEndTransactionOperation(f)
 	if err != nil {
 		t.Fatalf("Failed to read from file")
 	}

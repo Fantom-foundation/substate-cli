@@ -4,6 +4,8 @@ import (
 	"fmt"
 	cli "gopkg.in/urfave/cli.v1"
 
+	"github.com/ethereum/go-ethereum/substate"
+	"github.com/Fantom-foundation/substate-cli/state"
 	"github.com/Fantom-foundation/substate-cli/tracer"
 )
 
@@ -13,7 +15,9 @@ var TraceReplayCommand = cli.Command{
 	Name:      "trace-replay",
 	Usage:     "executes storage trace",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
-	Flags:     []cli.Flag{},
+	Flags:     []cli.Flag{
+		substate.SubstateDirFlag,
+	},
 	Description: `
 The substate-cli trace-replay command requires two arguments:
 <blockNumFirst> <blockNumLast>
@@ -36,19 +40,54 @@ func storageDriver(first uint64, last uint64) {
 	fposIndex.Read("filepos-index.dat")
 
 	// create index and execution context
-	// eCtx := &ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
+	eCtx := &tracer.ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
 	iCtx := &tracer.IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
 
 	// Create dummy statedb to make it compile
 	// TODO: plug-in real DBs and prime DB at block "first"
-	// var db *StateDB = nil
 
+	// iterate substate (for in-membory state)
+	stateIter := substate.NewSubstateIterator(first, 4)
+	defer stateIter.Release()
 	// replay storage trace
-	iter := tracer.NewStorageTraceIterator(iCtx, first, last)
-	defer iter.Release()
-	for iter.Next() {
-		// op := iter.Value()
-		// (*op).Execute(db, eCtx)
+	traceIter := tracer.NewStorageTraceIterator(iCtx, first, last)
+	defer traceIter.Release()
+
+	for stateIter.Next() {
+		tx := stateIter.Value()
+		if tx.Block > last {
+			break
+		}
+		db := state.MakeOffTheChainStateDB(tx.Substate.InputAlloc)
+		for traceIter.Next() {
+			op := traceIter.Value()
+			(*op).Execute(db, eCtx)
+			//(*op).Debug()
+
+			//find end of transaction
+			if (*op).GetOpId() == tracer.EndTransactionOperationID {
+				break
+			}
+		}
+
+		db.Finalise(true)
+
+		//Compare stateDB and OuputAlloc
+		outputAlloc := db.GetSubstatePostAlloc()
+		recordedAlloc := tx.Substate.OutputAlloc
+		for account, xAlloc := range recordedAlloc {
+			if yAlloc, exist := outputAlloc[account]; exist {
+				for k, xv := range xAlloc.Storage {
+				 	if yv, exist := yAlloc.Storage[k]; !exist || xv != yv {
+						fmt.Printf("Error: mismatched value at storage key %v. want %v have %v\n",k,xv,yv)
+					}
+
+				}
+			} else {
+				fmt.Printf("Error: account %v doesn't exist\n", account)
+			}
+
+		}
 	}
 }
 
@@ -56,16 +95,21 @@ func storageDriver(first uint64, last uint64) {
 func traceReplayAction(ctx *cli.Context) error {
 	var err error
 
-	tracer.TraceDir = ctx.String(TraceDirectoryFlag.Name) + "/"
+	tracer.TraceDir = ctx.String(TraceDirectoryFlag.Name)
 
 	if len(ctx.Args()) != 2 {
 		return fmt.Errorf("substate-cli replay-trace command requires exactly 2 arguments")
 	}
 
-	_ , _, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	first , last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
 	if argErr != nil {
 		return argErr
 	}
+	substate.SetSubstateFlags(ctx)
+	substate.OpenSubstateDBReadOnly()
+	defer substate.CloseSubstateDB()
+
+	storageDriver(first, last)
 
 	return err
 }

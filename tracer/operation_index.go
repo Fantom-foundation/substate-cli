@@ -46,7 +46,7 @@ func (oIdx *OperationIndex) Get(block uint64) (uint64, error) {
 // Write index to a binary file.
 func (oIdx *OperationIndex) Write(filename string) error {
 	// open index file for writing
-	f, err := os.OpenFile(TraceDir + filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (oIdx *OperationIndex) Read(filename string) error {
 	oIdx.Init()
 
 	// open storage dictionary file for reading
-	f, err := os.OpenFile(TraceDir + filename, os.O_CREATE|os.O_RDONLY, 0644)
+	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}

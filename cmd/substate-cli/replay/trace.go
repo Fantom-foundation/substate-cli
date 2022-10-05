@@ -224,7 +224,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 					if !ok {
 						log.Fatalf("Begin block operation downcasting failed")
 					}
-					fmt.Printf("New Block: %v\n", tOp.BlockNumber)
+					tOp.Debug()
 
 					// update indexes
 					opIndex.Add(tOp.BlockNumber, opNum)
@@ -237,7 +237,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 					if !ok {
 						log.Fatalf("Block operation downcasting failed")
 					}
-					fmt.Printf("End Block: %v\n", tOp.BlockNumber)
+					tOp.Debug()
 				}
 				continue
 			}
@@ -249,6 +249,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 
 			// write object to file
 			op.Write(files[i])
+			op.Debug()
 
 			// update operation number
 			opNum++
@@ -331,7 +332,7 @@ func traceAction(ctx *cli.Context) error {
 			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, contractDict, storageDict, opChannel)
-		opChannel <- tracer.NewEndOfTransactionOperation()
+		opChannel <- tracer.NewEndTransactionOperation()
 	}
 
 	// write dictionaries and indexes

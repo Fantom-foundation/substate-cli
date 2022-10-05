@@ -26,10 +26,11 @@ func NewStorageTraceIterator(iCtx *IndexContext, first uint64, last uint64) *Tra
 	p.iCtx = iCtx
 	p.lastBlock = last
 	p.files = make([]*os.File, NumWriteOperations)
+	p.nextOp = make([]*StateOperation, NumWriteOperations)
 	for i := 0; i < NumWriteOperations; i++ {
 		f, err := os.OpenFile(GetFilename(i), os.O_RDONLY|os.O_CREATE, 0644)
 		if err != nil {
-			log.Fatalf("Cannot open state operation file %v", i)
+			log.Fatalf("Cannot open state operation file %v. Filename %v", i, GetFilename(i))
 		}
 		p.files[i] = f
 		p.nextOp[i] = Read(f, i)

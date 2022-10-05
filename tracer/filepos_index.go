@@ -46,7 +46,7 @@ func (fposIdx *FilePositionIndex) Get(block uint64) ([NumWriteOperations]uint64,
 // Write index to a binary file.
 func (fposIdx *FilePositionIndex) Write(filename string) error {
 	// open index file for writing
-	f, err := os.OpenFile(TraceDir + filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (fposIdx *FilePositionIndex) Read(filename string) error {
 	fposIdx.Init()
 
 	// open storage dictionary file for reading
-	f, err := os.OpenFile(TraceDir + filename, os.O_CREATE|os.O_RDONLY, 0644)
+	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}

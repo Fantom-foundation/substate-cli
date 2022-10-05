@@ -26,6 +26,8 @@ func NewStateProxyDB(db state.StateDB, contractDict *ContractDictionary, storage
 }
 
 func (s *StateProxyDB) CreateAccount(addr common.Address) {
+	contractIdx, _ := s.contractDict.Encode(addr)
+	s.ch <- NewCreateAccountOperation(contractIdx)
 	s.db.CreateAccount(addr)
 }
 
@@ -190,8 +192,4 @@ func (s *StateProxyDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types
 
 func (s *StateProxyDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 	return s.db.GetSubstatePostAlloc()
-}
-
-func (s *StateProxyDB) EndOfTransaction() {
-	s.ch <- NewEndOfTransactionOperation()
 }

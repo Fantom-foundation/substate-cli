@@ -3,6 +3,7 @@ package tracer
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -24,10 +25,11 @@ const SetStateOperationID = NumPseudoOperations + 1
 const GetCommittedStateOperationID = NumPseudoOperations + 2
 const SnapshotOperationID = NumPseudoOperations + 3
 const RevertToSnapshotOperationID = NumPseudoOperations + 4
-const EndOfTransactionOperationID = NumPseudoOperations + 5 //last
+const CreateAccountOperationID = NumPseudoOperations + 5
+const EndTransactionOperationID = NumPseudoOperations + 6 //last
 
 // Number of state operation identifiers
-const NumOperations = EndOfTransactionOperationID + 1 //last op + 1
+const NumOperations = EndTransactionOperationID + 1 //last op + 1
 
 // Number of write operations
 const NumWriteOperations = NumOperations - NumPseudoOperations
@@ -42,6 +44,7 @@ var idToFilename = [NumOperations]string{
 	"sop-getcommittedstate.dat",
 	"sop-snapshot.dat",
 	"sop-reverttosnapshot.dat",
+	"sop-createaccount.dat",
 	"sop-endoftransaction.dat",
 }
 
@@ -96,10 +99,11 @@ func (w *Writable) Get() uint64 {
 
 // State-opertion interface
 type StateOperation interface {
-	GetOpId() int                                    // obtain operation identifier
-	GetWritable() *Writable                          // obtain writeable interface
-	Write(*os.File)                                  // write operation
-	Execute(*state.StateDB, *ExecutionContext) error // execute operation
+	GetOpId() int                                   // obtain operation identifier
+	GetWritable() *Writable                         // obtain writeable interface
+	Write(*os.File)                                 // write operation
+	Execute(state.StateDB, *ExecutionContext) error // execute operation
+	Debug()
 }
 
 // Read a state operation from file
@@ -120,11 +124,15 @@ func Read(f *os.File, ID int) *StateOperation {
 		sop, err = ReadSnapshotOperation(f)
 	case RevertToSnapshotOperationID:
 		sop, err = ReadRevertToSnapshotOperation(f)
-	case EndOfTransactionOperationID:
-		sop, err = ReadEndOfTransactionOperation(f)
+	case CreateAccountOperationID:
+		sop, err = ReadCreateAccountOperation(f)
+	case EndTransactionOperationID:
+		sop, err = ReadEndTransactionOperation(f)
 	}
-	if err != nil {
-		log.Fatal(err)
+	if err == io.EOF {
+		return nil
+	} else if err != nil {
+		log.Fatalf("Failed to read operation %v. Error %v", sop.GetOpId(), err)
 	}
 	return &sop
 }
@@ -159,9 +167,14 @@ func (bb *BeginBlockOperation) Write(files *os.File) {
 }
 
 // Execute state operation
-func (bb *BeginBlockOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+func (bb *BeginBlockOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
 	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.BlockNumber)
 	return nil
+}
+
+// Print a debug message
+func (bb *BeginBlockOperation) Debug() {
+	fmt.Printf("Begin-Block: block number %v\n", bb.BlockNumber)
 }
 
 ////////////////////////////////////////////////////////////
@@ -194,9 +207,14 @@ func (eb *EndBlockOperation) Write(files *os.File) {
 }
 
 // Execute state operation
-func (eb *EndBlockOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+func (eb *EndBlockOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
 	log.Fatalf("End-block operation for block %v attempted to be executed", eb.BlockNumber)
 	return nil
+}
+
+// Print a debug message
+func (eb *EndBlockOperation) Debug() {
+	fmt.Printf("End-Block: block number %v\n", eb.BlockNumber)
 }
 
 ////////////////////////////////////////////////////////////
@@ -240,16 +258,14 @@ func (sop *GetStateOperation) Write(f *os.File) {
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatalf("GetStateOperation: %v", err)
+			log.Fatalf("Failed to write GetStateOperation: %v", err)
 		}
 	}
-
-	// debug message
-	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex)
 }
 
 // Execute state operation
-func (sop *GetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+func (sop *GetStateOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
+
 	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
 	if cerr != nil {
 		return cerr
@@ -258,8 +274,14 @@ func (sop *GetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) 
 	if serr != nil {
 		return serr
 	}
-	(*db).GetState(contract, storage)
+	db.GetState(contract, storage)
+
 	return nil
+}
+
+// Print a debug message
+func (sop *GetStateOperation) Debug() {
+	fmt.Printf("GetState: operation number: %v\t contract idx: %v\t storage idx: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex)
 }
 
 ////////////////////////////////////////////////////////////
@@ -304,16 +326,14 @@ func (sop *SetStateOperation) Write(f *os.File) {
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatalf("SetStateOperation: %v", err)
+			log.Fatalf("Failed to write SetStateOperation: %v", err)
 		}
 	}
-
-	// debug message
-	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex, sop.Value.Hex())
 }
 
 // Execute state operation
-func (sop *SetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+func (sop *SetStateOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
+
 	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
 	if cerr != nil {
 		return cerr
@@ -322,8 +342,14 @@ func (sop *SetStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) 
 	if serr != nil {
 		return serr
 	}
-	(*db).SetState(contract, storage, sop.Value)
+	db.SetState(contract, storage, sop.Value)
+
 	return nil
+}
+
+// Print a debug message
+func (sop *SetStateOperation) Debug() {
+	fmt.Printf("SetState: operation number: %v\t contract idx: %v\t storage idx: %v\t value: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex, sop.Value.Hex())
 }
 
 ////////////////////////////////////////////////////////////
@@ -367,16 +393,13 @@ func (sop *GetCommittedStateOperation) Write(f *os.File) {
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatalf("GetCommittedStateOperation: %v", err)
+			log.Fatalf("Failed to write GetCommittedStateOperation: %v", err)
 		}
 	}
-
-	// debug message
-	fmt.Printf("GetCommittedState: operation number: %v\t contract idx: %v\t storage idx: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex)
 }
 
 // Execute state operation
-func (sop *GetCommittedStateOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+func (sop *GetCommittedStateOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
 	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
 	if cerr != nil {
 		return cerr
@@ -385,8 +408,14 @@ func (sop *GetCommittedStateOperation) Execute(db *state.StateDB, ctx *Execution
 	if serr != nil {
 		return serr
 	}
-	(*db).GetCommittedState(contract, storage)
+	db.GetCommittedState(contract, storage)
 	return nil
+}
+
+// Print a debug message
+func (sop *GetCommittedStateOperation) Debug() {
+	fmt.Printf("GetCommittedState: operation number: %v\t contract idx: %v\t storage idx: %v\n", sop.Writable.Get(), sop.ContractIndex, sop.StorageIndex)
+
 }
 
 ////////////////////////////////////////////////////////////
@@ -428,18 +457,21 @@ func (sop *SnapshotOperation) Write(f *os.File) {
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatalf("SnapshotOperation: %v", err)
+			log.Fatalf("Failed to write Snapshot Operation: %v", err)
 		}
 	}
-
-	// debug message
-	fmt.Printf("Snapshot: operation number: %v\n", sop.Writable.Get())
 }
 
 // Execute state operation
-func (sop *SnapshotOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
-	(*db).Snapshot()
+func (sop *SnapshotOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
+	db.Snapshot()
 	return nil
+}
+
+// Print a debug message
+func (sop *SnapshotOperation) Debug() {
+	// debug message
+	fmt.Printf("Snapshot: operation number: %v\n", sop.Writable.Get())
 }
 
 ////////////////////////////////////////////////////////////
@@ -470,6 +502,7 @@ func ReadRevertToSnapshotOperation(file *os.File) (*RevertToSnapshotOperation, e
 	}
 	err := binary.Read(file, binary.LittleEndian, &data)
 	rtso := &RevertToSnapshotOperation{Writable: data.Writable, SnapshotID: int(data.SnapshotID)}
+
 	return rtso, err
 }
 
@@ -486,68 +519,132 @@ func (sop *RevertToSnapshotOperation) Write(f *os.File) {
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatalf("RevertToSnapshotOperation: %v", err)
+			log.Fatalf("Failed to write RevertToSnapshotOperation: %v", err)
 		}
 	}
-
-	// debug message
-	fmt.Printf("RevertToSnapshot: operation number: %v\t snapshot id: %v\n", sop.Writable.Get(), sop.SnapshotID)
 }
 
 // Execute state operation
-func (sop *RevertToSnapshotOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
-	(*db).RevertToSnapshot(int(sop.SnapshotID))
+func (sop *RevertToSnapshotOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
+	db.RevertToSnapshot(sop.SnapshotID)
 	return nil
+}
+
+// Print a debug message
+func (sop *RevertToSnapshotOperation) Debug() {
+	fmt.Printf("RevertToSnapshot: operation number: %v\t snapshot id: %v\n", sop.Writable.Get(), sop.SnapshotID)
+}
+
+////////////////////////////////////////////////////////////
+// CreateAccount Operation
+////////////////////////////////////////////////////////////
+
+// CreateAccount datastructure with returned snapshot id
+type CreateAccountOperation struct {
+	Writable
+	ContractIndex uint32 // encoded contract address
+}
+
+// Return snapshot operation identifier.
+func (sop *CreateAccountOperation) GetOpId() int {
+	return CreateAccountOperationID
+}
+
+// Create a new snapshot operation.
+func NewCreateAccountOperation(ContractIndex uint32) *CreateAccountOperation {
+	return &CreateAccountOperation{ContractIndex: ContractIndex}
+}
+
+// Read snapshot operation from a file.
+func ReadCreateAccountOperation(file *os.File) (*CreateAccountOperation, error) {
+	data := new(CreateAccountOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (sop *CreateAccountOperation) GetWritable() *Writable {
+	return &sop.Writable
+}
+
+// Write a snapshot operation.
+func (sop *CreateAccountOperation) Write(f *os.File) {
+	// group information into data slice
+	var data = []any{sop.Writable.Get(), sop.ContractIndex}
+
+	// write data to file
+	for _, val := range data {
+		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
+			log.Fatalf("Failed to write CreateAccountOperation: %v", err)
+		}
+	}
+}
+
+// Execute state operation
+func (sop *CreateAccountOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
+	contract, cerr := ctx.ContractDictionary.Decode(sop.ContractIndex)
+	if cerr != nil {
+		return cerr
+	}
+	db.CreateAccount(contract)
+	return nil
+}
+
+// Print a debug message
+func (sop *CreateAccountOperation) Debug() {
+	fmt.Printf("CreateAccount: operation number: %v\t contract id: %v\n", sop.Writable.Get(), sop.ContractIndex)
 }
 
 ////////////////////////////////////////////////////////////
 // End of transaction Operation
 ////////////////////////////////////////////////////////////
 
-// EndOfTransaction datastructure with returned snapshot id
-type EndOfTransactionOperation struct {
+// EndTransaction datastructure with returned snapshot id
+type EndTransactionOperation struct {
 	Writable
 }
 
 // Return snapshot operation identifier.
-func (sop *EndOfTransactionOperation) GetOpId() int {
-	return EndOfTransactionOperationID
+func (sop *EndTransactionOperation) GetOpId() int {
+	return EndTransactionOperationID
 }
 
 // Create a new snapshot operation.
-func NewEndOfTransactionOperation() *EndOfTransactionOperation {
-	return &EndOfTransactionOperation{}
+func NewEndTransactionOperation() *EndTransactionOperation {
+	return &EndTransactionOperation{}
 }
 
 // Read snapshot operation from a file.
-func ReadEndOfTransactionOperation(file *os.File) (*EndOfTransactionOperation, error) {
-	data := new(EndOfTransactionOperation)
+func ReadEndTransactionOperation(file *os.File) (*EndTransactionOperation, error) {
+	data := new(EndTransactionOperation)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
 // Return writeable interface
-func (sop *EndOfTransactionOperation) GetWritable() *Writable {
+func (sop *EndTransactionOperation) GetWritable() *Writable {
 	return &sop.Writable
 }
 
 // Write a snapshot operation.
-func (sop *EndOfTransactionOperation) Write(f *os.File) {
+func (sop *EndTransactionOperation) Write(f *os.File) {
 	// group information into data slice
 	var data = []any{sop.Writable.Get()}
 
 	// write data to file
 	for _, val := range data {
 		if err := binary.Write(f, binary.LittleEndian, val); err != nil {
-			log.Fatalf("EndOfTransactionOperation: %v", err)
+			log.Fatalf("Failed to write End-TransactionOperation: %v", err)
 		}
 	}
-
-	// debug message
-	fmt.Printf("EndOfTransaction: operation number: %v\n", sop.Writable.Get())
 }
 
 // Execute state operation
-func (sop *EndOfTransactionOperation) Execute(db *state.StateDB, ctx *ExecutionContext) error {
+func (sop *EndTransactionOperation) Execute(db state.StateDB, ctx *ExecutionContext) error {
 	return nil
+}
+
+// Print a debug message
+func (sop *EndTransactionOperation) Debug() {
+	fmt.Printf("End-Transaction: operation number: %v\n", sop.Writable.Get())
 }

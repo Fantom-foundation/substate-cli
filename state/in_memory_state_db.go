@@ -27,6 +27,10 @@ func MakeInMemoryStateDB(alloc *substate.SubstateAlloc) StateDB {
 	return &inMemoryStateDB{alloc: alloc, state: makeSnapshot(nil, 0)}
 }
 
+func MakeEmptyInMemoryStateDB() StateDB {
+        return &inMemoryStateDB{alloc: nil, state: makeSnapshot(nil, 0)}
+}
+
 // inMemoryStateDB implements the interface of a state.StateDB and can be
 // used as a fast, in-memory replacement of the state DB.
 type inMemoryStateDB struct {
