@@ -14,7 +14,7 @@ var ValueDictionaryLimit uint64 = math.MaxUint64
 // to a dictionary index or vice versa.
 type ValueDictionary struct {
 	storageToIdx map[common.Hash]uint64 // storage address to index map for encoding
-	idxToValue []common.Hash          // storage address slice for decoding
+	idxToValue   []common.Hash          // storage address slice for decoding
 }
 
 // Init initializes or clears a storage dictionary.
