@@ -2,9 +2,10 @@ package replay
 
 import (
 	"fmt"
-	"strconv"
 	cli "gopkg.in/urfave/cli.v1"
+	"strconv"
 )
+
 // chain id
 var chainID int
 var (
@@ -65,7 +66,7 @@ var (
 	}
 )
 
-func SetBlockRange (firstArg string, lastArg string) (uint64, uint64, error) {
+func SetBlockRange(firstArg string, lastArg string) (uint64, uint64, error) {
 	first, ferr := strconv.ParseUint(firstArg, 10, 64)
 	last, lerr := strconv.ParseUint(lastArg, 10, 64)
 	if ferr != nil || lerr != nil {

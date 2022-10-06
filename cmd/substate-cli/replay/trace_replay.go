@@ -4,9 +4,9 @@ import (
 	"fmt"
 	cli "gopkg.in/urfave/cli.v1"
 
-	"github.com/ethereum/go-ethereum/substate"
 	"github.com/Fantom-foundation/substate-cli/state"
 	"github.com/Fantom-foundation/substate-cli/tracer"
+	"github.com/ethereum/go-ethereum/substate"
 )
 
 // record-replay: substate-cli replay command
@@ -15,7 +15,7 @@ var TraceReplayCommand = cli.Command{
 	Name:      "trace-replay",
 	Usage:     "executes storage trace",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
-	Flags:     []cli.Flag{
+	Flags: []cli.Flag{
 		substate.SubstateDirFlag,
 	},
 	Description: `
@@ -27,20 +27,20 @@ last block of the inclusive range of blocks to replay storage traces.`,
 }
 
 func storageDriver(first uint64, last uint64) {
-	// create new dictionaries and indices
+	// create and load dictionaries
 	contractDict := tracer.NewContractDictionary()
-	storageDict := tracer.NewStorageDictionary()
-	opIndex := tracer.NewOperationIndex()
-	fposIndex := tracer.NewFilePositionIndex()
-
-	// load dictionaries and indexes from file
 	contractDict.Read("contract-dictionary.dat")
+	storageDict := tracer.NewStorageDictionary()
 	storageDict.Read("storage-dictionary.dat")
-	opIndex.Read("operation-index.dat")
-	fposIndex.Read("filepos-index.dat")
+	valueDict := tracer.NewValueDictionary()
+	valueDict.Read("value-dictionary.dat")
+	eCtx := tracer.NewExecutionContext(contractDict, storageDict, valueDict)
 
-	// create index and execution context
-	eCtx := &tracer.ExecutionContext{ContractDictionary: contractDict, StorageDictionary: storageDict}
+	// create and load indexes
+	opIndex := tracer.NewOperationIndex()
+	opIndex.Read("operation-index.dat")
+	fposIndex := tracer.NewFilePositionIndex()
+	fposIndex.Read("filepos-index.dat")
 	iCtx := &tracer.IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
 
 	// Create dummy statedb to make it compile
@@ -62,7 +62,7 @@ func storageDriver(first uint64, last uint64) {
 		for traceIter.Next() {
 			op := traceIter.Value()
 			(*op).Execute(db, eCtx)
-			//(*op).Debug()
+			tracer.Debug(eCtx, op)
 
 			//find end of transaction
 			if (*op).GetOpId() == tracer.EndTransactionOperationID {
@@ -78,8 +78,8 @@ func storageDriver(first uint64, last uint64) {
 		for account, xAlloc := range recordedAlloc {
 			if yAlloc, exist := outputAlloc[account]; exist {
 				for k, xv := range xAlloc.Storage {
-				 	if yv, exist := yAlloc.Storage[k]; !exist || xv != yv {
-						fmt.Printf("Error: mismatched value at storage key %v. want %v have %v\n",k,xv,yv)
+					if yv, exist := yAlloc.Storage[k]; !exist || xv != yv {
+						fmt.Printf("Error: mismatched value at storage key %v. want %v have %v\n", k, xv, yv)
 					}
 
 				}
@@ -101,7 +101,7 @@ func traceReplayAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli replay-trace command requires exactly 2 arguments")
 	}
 
-	first , last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	first, last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
 	if argErr != nil {
 		return argErr
 	}
