@@ -50,8 +50,6 @@ var idToFilename = [NumWriteOperations]string{
 
 // State operations' names
 var idToLabel = [NumOperations]string{
-	"BeginBlock",
-	"EndBlock",
 	"GetState",
 	"SetState",
 	"GetCommittedState",
@@ -59,6 +57,9 @@ var idToLabel = [NumOperations]string{
 	"RevertToSnapshot",
 	"CreateAccount",
 	"EndOfTransaction",
+	// Pseudo Operations
+	"BeginBlock",      
+	"EndBlock",
 }
 
 // Get filename of a state operation that is written to a file
@@ -192,7 +193,6 @@ func Read(f *os.File, ID int) *StateOperation {
 			log.Fatalf("Read operation %v not implemented", GetLabel(op.GetOpId()))
 		} else if ID >= NumWriteOperations && ID < NumOperations {
 			log.Fatalf("Cannot read pseudo-operation %v from file", GetLabel(op.GetOpId()))
-
 		} else {
 			log.Fatalf("ID out of range", GetLabel(op.GetOpId()))
 		}
