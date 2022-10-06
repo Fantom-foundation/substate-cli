@@ -218,7 +218,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 	for {
 		select {
 		case op := <-ch:
-			if op.GetOpId() < tracer.NumPseudoOperations {
+			if op.GetOpId() >= tracer.NumWriteOperations {
 				switch op.GetOpId() {
 				case tracer.BeginBlockOperationID:
 					tOp, ok := op.(*tracer.BeginBlockOperation)
