@@ -61,7 +61,7 @@ type TraceConfig struct {
 }
 
 // traceTask generates storage traces for each transaction
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, dCtx *tracer.DictionaryContext, ch chan tracer.StateOperation) error {
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, dCtx *tracer.DictionaryContext, ch chan tracer.Operation) error {
 
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
@@ -195,7 +195,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 }
 
 // Read state operations from channel and write them into their files.
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, dCtx *tracer.DictionaryContext, iCtx *tracer.IndexContext) {
+func OperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.Operation, dCtx *tracer.DictionaryContext, iCtx *tracer.IndexContext) {
 	defer close(done)
 
 	// open trace file
@@ -215,8 +215,8 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 
 			// is it a pseudo operation?
 			switch op.GetOpId() {
-			case tracer.BeginBlockOperationID:
-				tOp, ok := op.(*tracer.BeginBlockOperation)
+			case tracer.BeginBlockID:
+				tOp, ok := op.(*tracer.BeginBlock)
 				if !ok {
 					log.Fatalf("Begin block operation downcasting failed")
 				}
@@ -227,7 +227,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 				iCtx.BlockIndex.Add(tOp.BlockNumber, offset)
 
 			default:
-				tracer.Write(file, op)
+				tracer.WriteOperation(file, op)
 			}
 
 
@@ -255,11 +255,11 @@ func traceAction(ctx *cli.Context) error {
 
 	dCtx := tracer.NewDictionaryContext()
 	iCtx := tracer.NewIndexContext()
-	opChannel := make(chan tracer.StateOperation, 10000)
+	opChannel := make(chan tracer.Operation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
-	go StateOperationWriter(cctx, cancelChannel, opChannel, dCtx, iCtx)
+	go OperationWriter(cctx, cancelChannel, opChannel, dCtx, iCtx)
 	defer func() {
 		// cancel writers
 		(cancel)()        // stop writer
@@ -292,17 +292,17 @@ func traceAction(ctx *cli.Context) error {
 		// close off old block with an end-block operation
 		if oldBlock != tx.Block {
 			if oldBlock != math.MaxUint64 {
-				opChannel <- tracer.NewEndBlockOperation(oldBlock)
+				opChannel <- tracer.NewEndBlock(oldBlock)
 			}
 			if tx.Block > last {
 				break
 			}
 			oldBlock = tx.Block
 			// open new block with a begin-block operation
-			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
+			opChannel <- tracer.NewBeginBlock(tx.Block)
 		}
 		traceTask(config, tx.Block, tx.Transaction, tx.Substate, dCtx, opChannel)
-		opChannel <- tracer.NewEndTransactionOperation()
+		opChannel <- tracer.NewEndTransaction()
 	}
 
 	// write dictionaries and indexes

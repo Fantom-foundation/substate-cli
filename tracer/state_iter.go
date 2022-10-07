@@ -10,8 +10,11 @@ type TraceIterator struct {
 	lastBlock uint64         // last block to process
 	iCtx      *IndexContext  // index context
 	file      *os.File       // trace file
-	currentOp StateOperation // current state operation
+	currentOp Operation // current state operation
 }
+
+// Output directory
+var TraceDir string = "./"
 
 // Create new trace iterator.
 func NewTraceIterator(iCtx *IndexContext, first uint64, last uint64) *TraceIterator {
@@ -21,7 +24,7 @@ func NewTraceIterator(iCtx *IndexContext, first uint64, last uint64) *TraceItera
 
 	// TODO: Add trace directory to filename
 	var err error
-	p.file, err = os.OpenFile("trace.dat", os.O_RDONLY|os.O_CREATE, 0644)
+	p.file, err = os.OpenFile(TraceDir+"trace.dat", os.O_RDONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalf("Cannot open trace file.")
 	}
@@ -45,12 +48,12 @@ func (ti *TraceIterator) Next() bool {
 	//       return false
 	//  }
 	// }
-	ti.currentOp = Read(ti.file)
-	return ti.currentOp == nil
+	ti.currentOp = ReadOperation(ti.file)
+	return ti.currentOp != nil
 }
 
 // Retrieve current state operation of the iterator.
-func (ti *TraceIterator) Value() StateOperation {
+func (ti *TraceIterator) Value() Operation {
 	return ti.currentOp
 }
 

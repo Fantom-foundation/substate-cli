@@ -11,28 +11,23 @@ import (
 )
 
 // Stored Operations
-// TODO: Remove word Operation from ID constants
-const GetStateOperationID = 0
-const SetStateOperationID = 1
-const GetCommittedStateOperationID = 2
-const SnapshotOperationID = 3
-const RevertToSnapshotOperationID = 4
-const CreateAccountOperationID = 5
-const GetBalanceOperationID = 6
-const GetCodeHashOperationID = 7
-const SuicideOperationID = 8
-const ExistOperationID = 9
-const FinaliseOperationID = 10
-const EndTransactionOperationID = 11 //last
-const BeginBlockOperationID = 12
-const EndBlockOperationID = 13
+const GetStateID = 0
+const SetStateID = 1
+const GetCommittedStateID = 2
+const SnapshotID = 3
+const RevertToSnapshotID = 4
+const CreateAccountID = 5
+const GetBalanceID = 6
+const GetCodeHashID = 7
+const SuicideID = 8
+const ExistID = 9
+const FinaliseID = 10
+const EndTransactionID = 11 //last
+const BeginBlockID = 12
+const EndBlockID = 13
 
 // Number of state operation identifiers
-const NumOperations = EndBlockOperationID + 1 //last op + 1
-
-
-// Output directory
-var TraceDir string = "./"
+const NumOperations = EndBlockID + 1 //last op + 1
 
 // State operations' names
 var idToLabel = [NumOperations]string{
@@ -54,14 +49,19 @@ var idToLabel = [NumOperations]string{
 }
 
 // State operation's read functions
-var readFunction = [NumOperations]func(*os.File) (StateOperation, error){
-	ReadGetStateOperation,
-	ReadSetStateOperation,
-	ReadGetCommittedStateOperation,
-	ReadSnapshotOperation,
-	ReadRevertToSnapshotOperation,
-	ReadCreateAccountOperation,
-	ReadEndTransactionOperation,
+var readFunction = [NumOperations]func(*os.File) (Operation, error){
+	ReadGetState,
+	ReadSetState,
+	ReadGetCommittedState,
+	ReadSnapshot,
+	ReadRevertToSnapshot,
+	ReadCreateAccount,
+	ReadGetBalance,
+	ReadGetCodeHash,
+	ReadSuicide,
+	ReadExist,
+	ReadFinalise,
+	ReadEndTransaction,
 }
 
 // Get a label of a state operation
@@ -77,19 +77,18 @@ func GetLabel(i byte) string {
 ////////////////////////////////////////////////////////////
 
 // State-operation interface
-// TODO: Rename StateOperation to Operation
-type StateOperation interface {
+type Operation interface {
 	GetOpId() byte                             // obtain operation identifier
-	Write(*os.File)                            // write operation
+	WriteOperation(*os.File)                            // write operation
 	Execute(state.StateDB, *DictionaryContext) // execute operation
 	Debug(*DictionaryContext)                  // print debug message for operation
 }
 
 // Read a state operation from file.
 // TODO: Rename Read to ReadOperation
-func Read(f *os.File) StateOperation {
+func ReadOperation(f *os.File) Operation {
 	var (
-		op StateOperation
+		op Operation
 		ID byte
 	)
 
@@ -117,7 +116,7 @@ func Read(f *os.File) StateOperation {
 
 // Write state operation to file.
 // TODO: Rename Write to WriteOperation
-func Write(f *os.File, op StateOperation) {
+func WriteOperation(f *os.File, op Operation) {
 	// write ID to file
 	ID := op.GetOpId()
 	if err := binary.Write(f, binary.LittleEndian, &ID); err != nil {
@@ -125,7 +124,7 @@ func Write(f *os.File, op StateOperation) {
 	}
 
 	// write details of operation to file
-	op.Write(f)
+	op.WriteOperation(f)
 }
 
 // Write slice in little-endian format to file (helper Function).
@@ -138,7 +137,7 @@ func writeSlice(f *os.File, data []any) {
 }
 
 // Print debug information of a state operation.
-func Debug(ctx *DictionaryContext, op StateOperation) {
+func Debug(ctx *DictionaryContext, op Operation) {
 	fmt.Printf("%v:\n", GetLabel(op.GetOpId()))
 	op.Debug(ctx)
 }
@@ -150,30 +149,30 @@ func Debug(ctx *DictionaryContext, op StateOperation) {
 ////////////////////////////////////////////////////////////
 
 // Block-operation data structure capturing the beginning of a block.
-type BeginBlockOperation struct {
+type BeginBlock struct {
 	BlockNumber uint64 // block number
 }
 
 // Return begin-block operation identifier.
-func (bb *BeginBlockOperation) GetOpId() byte {
-	return BeginBlockOperationID
+func (bb *BeginBlock) GetOpId() byte {
+	return BeginBlockID
 }
 
 // Create a new begin-block operation.
-func NewBeginBlockOperation(bbNum uint64) *BeginBlockOperation {
-	return &BeginBlockOperation{BlockNumber: bbNum}
+func NewBeginBlock(bbNum uint64) *BeginBlock {
+	return &BeginBlock{BlockNumber: bbNum}
 }
 
 // Write block operation (should never be invoked).
-func (bb *BeginBlockOperation) Write(files *os.File) {
+func (bb *BeginBlock) WriteOperation(files *os.File) {
 }
 
 // Execute state operation.
-func (bb *BeginBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (bb *BeginBlock) Execute(db state.StateDB, ctx *DictionaryContext) {
 }
 
 // Print a debug message.
-func (bb *BeginBlockOperation) Debug(ctx *DictionaryContext) {
+func (bb *BeginBlock) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tblock number: %v\n", bb.BlockNumber)
 }
 
@@ -182,30 +181,30 @@ func (bb *BeginBlockOperation) Debug(ctx *DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // Block-operation data structure capturing the beginning of a block.
-type EndBlockOperation struct {
+type EndBlock struct {
 	BlockNumber uint64 // block number
 }
 
 // Return end-block operation identifier.
-func (eb *EndBlockOperation) GetOpId() byte {
-	return EndBlockOperationID
+func (eb *EndBlock) GetOpId() byte {
+	return EndBlockID
 }
 
 // Create a new end-block operation.
-func NewEndBlockOperation(ebNum uint64) *EndBlockOperation {
-	return &EndBlockOperation{BlockNumber: ebNum}
+func NewEndBlock(ebNum uint64) *EndBlock {
+	return &EndBlock{BlockNumber: ebNum}
 }
 
 // Write end-block operation (should never be invoked).
-func (eb *EndBlockOperation) Write(files *os.File) {
+func (eb *EndBlock) WriteOperation(files *os.File) {
 }
 
 // Execute state operation.
-func (eb *EndBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (eb *EndBlock) Execute(db state.StateDB, ctx *DictionaryContext) {
 }
 
 // Print a debug message
-func (eb *EndBlockOperation) Debug(ctx *DictionaryContext) {
+func (eb *EndBlock) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tblock number: %v\n", eb.BlockNumber)
 }
 
@@ -214,43 +213,43 @@ func (eb *EndBlockOperation) Debug(ctx *DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // GetState datastructure with encoded contract and storage addresses.
-type GetStateOperation struct {
+type GetState struct {
 	ContractIndex uint32 // encoded contract address
 	StorageIndex  uint32 // encoded storage address
 }
 
 // Return get-state operation identifier.
-func (op *GetStateOperation) GetOpId() byte {
-	return GetStateOperationID
+func (op *GetState) GetOpId() byte {
+	return GetStateID
 }
 
 // Create a new get-state operation.
-func NewGetStateOperation(cIdx uint32, sIdx uint32) *GetStateOperation {
-	return &GetStateOperation{ContractIndex: cIdx, StorageIndex: sIdx}
+func NewGetState(cIdx uint32, sIdx uint32) *GetState {
+	return &GetState{ContractIndex: cIdx, StorageIndex: sIdx}
 }
 
 // Read get-state operation from a file.
-func ReadGetStateOperation(file *os.File) (StateOperation, error) {
-	data := new(GetStateOperation)
+func ReadGetState(file *os.File) (Operation, error) {
+	data := new(GetState)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
 // Write a get-state operation in binary format to a file.
-func (op *GetStateOperation) Write(f *os.File) {
+func (op *GetState) WriteOperation(f *os.File) {
 	var data = []any{op.ContractIndex, op.StorageIndex}
 	writeSlice(f, data)
 }
 
 // Execute get-state operation.
-func (op *GetStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (op *GetState) Execute(db state.StateDB, ctx *DictionaryContext) {
 	contract := ctx.getContract(op.ContractIndex)
 	storage := ctx.getStorage(op.StorageIndex)
 	db.GetState(contract, storage)
 }
 
 // Print a debug message.
-func (op *GetStateOperation) Debug(ctx *DictionaryContext) {
+func (op *GetState) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\t storage: %v\n",
 		ctx.getContract(op.ContractIndex),
 		ctx.getStorage(op.StorageIndex))
@@ -261,37 +260,37 @@ func (op *GetStateOperation) Debug(ctx *DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // SetState datastructure with encoded contract and storage addresses, and value.
-type SetStateOperation struct {
+type SetState struct {
 	ContractIndex uint32 // encoded contract address
 	StorageIndex  uint32 // encoded storage address
 	ValueIndex    uint64 // encoded storage value
 }
 
 // Return set-state identifier
-func (op *SetStateOperation) GetOpId() byte {
-	return SetStateOperationID
+func (op *SetState) GetOpId() byte {
+	return SetStateID
 }
 
 // Create a new set-state operation.
-func NewSetStateOperation(cIdx uint32, sIdx uint32, vIdx uint64) *SetStateOperation {
-	return &SetStateOperation{ContractIndex: cIdx, StorageIndex: sIdx, ValueIndex: vIdx}
+func NewSetState(cIdx uint32, sIdx uint32, vIdx uint64) *SetState {
+	return &SetState{ContractIndex: cIdx, StorageIndex: sIdx, ValueIndex: vIdx}
 }
 
 // Read set-state operation from a file.
-func ReadSetStateOperation(file *os.File) (StateOperation, error) {
-	data := new(SetStateOperation)
+func ReadSetState(file *os.File) (Operation, error) {
+	data := new(SetState)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
 // Write a set-state operation in binary format to a file.
-func (op *SetStateOperation) Write(f *os.File) {
+func (op *SetState) WriteOperation(f *os.File) {
 	var data = []any{op.ContractIndex, op.StorageIndex, op.ValueIndex}
 	writeSlice(f, data)
 }
 
 // Execute set-state operation.
-func (op *SetStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (op *SetState) Execute(db state.StateDB, ctx *DictionaryContext) {
 	contract := ctx.getContract(op.ContractIndex)
 	storage := ctx.getStorage(op.StorageIndex)
 	value := ctx.getValue(op.ValueIndex)
@@ -299,7 +298,7 @@ func (op *SetStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
 }
 
 // Print a debug message.
-func (op *SetStateOperation) Debug(ctx *DictionaryContext) {
+func (op *SetState) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\t storage: %v\t value: %v\n",
 		ctx.getContract(op.ContractIndex),
 		ctx.getStorage(op.StorageIndex),
@@ -311,43 +310,43 @@ func (op *SetStateOperation) Debug(ctx *DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // GetCommittedState datastructure with encoded contract and storage addresses.
-type GetCommittedStateOperation struct {
+type GetCommittedState struct {
 	ContractIndex uint32 // encoded contract address
 	StorageIndex  uint32 // encoded storage address
 }
 
 // Return get commited-state-operation identifier.
-func (op *GetCommittedStateOperation) GetOpId() byte {
-	return GetCommittedStateOperationID
+func (op *GetCommittedState) GetOpId() byte {
+	return GetCommittedStateID
 }
 
 // Create a new get-commited-state operation.
-func NewGetCommittedStateOperation(cIdx uint32, sIdx uint32) *GetCommittedStateOperation {
-	return &GetCommittedStateOperation{ContractIndex: cIdx, StorageIndex: sIdx}
+func NewGetCommittedState(cIdx uint32, sIdx uint32) *GetCommittedState {
+	return &GetCommittedState{ContractIndex: cIdx, StorageIndex: sIdx}
 }
 
 // Read get-commited-state operation from a file.
-func ReadGetCommittedStateOperation(file *os.File) (StateOperation, error) {
-	data := new(GetCommittedStateOperation)
+func ReadGetCommittedState(file *os.File) (Operation, error) {
+	data := new(GetCommittedState)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
 // Write a get-commited-state operation in binary format to file.
-func (op *GetCommittedStateOperation) Write(f *os.File) {
+func (op *GetCommittedState) WriteOperation(f *os.File) {
 	var data = []any{op.ContractIndex, op.StorageIndex}
 	writeSlice(f, data)
 }
 
 // Execute get-committed-state operation.
-func (op *GetCommittedStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (op *GetCommittedState) Execute(db state.StateDB, ctx *DictionaryContext) {
 	contract := ctx.getContract(op.ContractIndex)
 	storage := ctx.getStorage(op.StorageIndex)
 	db.GetCommittedState(contract, storage)
 }
 
 // Print details of get-committed-state operation
-func (op *GetCommittedStateOperation) Debug(ctx *DictionaryContext) {
+func (op *GetCommittedState) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\t storage: %v\n",
 		ctx.getContract(op.ContractIndex),
 		ctx.getStorage(op.StorageIndex))
@@ -358,35 +357,35 @@ func (op *GetCommittedStateOperation) Debug(ctx *DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // Snapshot datastructure with returned snapshot id
-type SnapshotOperation struct {
+type Snapshot struct {
 }
 
 // Return snapshot operation identifier.
-func (op *SnapshotOperation) GetOpId() byte {
-	return SnapshotOperationID
+func (op *Snapshot) GetOpId() byte {
+	return SnapshotID
 }
 
 // Create a new snapshot operation.
-func NewSnapshotOperation() *SnapshotOperation {
-	return &SnapshotOperation{}
+func NewSnapshot() *Snapshot {
+	return &Snapshot{}
 }
 
 // Read a snapshot operation from a file.
-func ReadSnapshotOperation(file *os.File) (StateOperation, error) {
-	return NewSnapshotOperation(), nil
+func ReadSnapshot(file *os.File) (Operation, error) {
+	return NewSnapshot(), nil
 }
 
 // Write the snapshot operation in binary format to file.
-func (op *SnapshotOperation) Write(f *os.File) {
+func (op *Snapshot) WriteOperation(f *os.File) {
 }
 
 // Execute the snapshot operation.
-func (op *SnapshotOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (op *Snapshot) Execute(db state.StateDB, ctx *DictionaryContext) {
 	db.Snapshot()
 }
 
 // Print the details for the snapshot operation.
-func (op *SnapshotOperation) Debug(*DictionaryContext) {
+func (op *Snapshot) Debug(*DictionaryContext) {
 }
 
 ////////////////////////////////////////////////////////////
@@ -394,40 +393,41 @@ func (op *SnapshotOperation) Debug(*DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // Revert-to-snapshot operation's datastructure with returned snapshot id
-type RevertToSnapshotOperation struct {
+type RevertToSnapshot struct {
 	SnapshotID int
 }
 
 // Return revert-to-snapshot operation identifier.
-func (op *RevertToSnapshotOperation) GetOpId() byte {
-	return RevertToSnapshotOperationID
+func (op *RevertToSnapshot) GetOpId() byte {
+	return RevertToSnapshotID
 }
 
 // Create a new revert-to-snapshot operation.
-func NewRevertToSnapshotOperation(SnapshotID int) *RevertToSnapshotOperation {
-	return &RevertToSnapshotOperation{SnapshotID: SnapshotID}
+func NewRevertToSnapshot(SnapshotID int) *RevertToSnapshot {
+	return &RevertToSnapshot{SnapshotID: SnapshotID}
 }
 
 // Read a revert-to-snapshot operation in binary format from file.
-func ReadRevertToSnapshotOperation(file *os.File) (StateOperation, error) {
-	data := new(RevertToSnapshotOperation)
-	err := binary.Read(file, binary.LittleEndian, data)
-	return data, err
+func ReadRevertToSnapshot(file *os.File) (Operation, error) {
+	var data int32
+	err := binary.Read(file, binary.LittleEndian, &data)
+	op := &RevertToSnapshot{SnapshotID: int(data)}
+	return op, err
 }
 
 // Write a revert-to-snapshot operation in binary format to file.
-func (op *RevertToSnapshotOperation) Write(f *os.File) {
+func (op *RevertToSnapshot) WriteOperation(f *os.File) {
 	var data = []any{int32(op.SnapshotID)}
 	writeSlice(f, data)
 }
 
 // Execute revert-to-snapshot operation.
-func (op *RevertToSnapshotOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (op *RevertToSnapshot) Execute(db state.StateDB, ctx *DictionaryContext) {
 	db.RevertToSnapshot(op.SnapshotID)
 }
 
 // Print a debug message for revert-to-snapshot operation.
-func (op *RevertToSnapshotOperation) Debug(ctx *ExecutionContext) {
+func (op *RevertToSnapshot) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tsnapshot id: %v\n", op.SnapshotID)
 }
 
@@ -436,41 +436,41 @@ func (op *RevertToSnapshotOperation) Debug(ctx *ExecutionContext) {
 ////////////////////////////////////////////////////////////
 
 // Create-account operation's datastructure with returned snapshot id
-type CreateAccountOperation struct {
+type CreateAccount struct {
 	ContractIndex uint32 // encoded contract address
 }
 
-// Return snapshot operation identifier.
-func (op *CreateAccountOperation) GetOpId() byte {
-	return CreateAccountOperationID
+// Return create-account operation identifier.
+func (op *CreateAccount) GetOpId() byte {
+	return CreateAccountID
 }
 
-// Create a new snapshot operation.
-func NewCreateAccountOperation(cIdx uint32) *CreateAccountOperation {
-	return &CreateAccountOperation{ContractIndex: cIdx}
+// Create a new create account operation.
+func NewCreateAccount(cIdx uint32) *CreateAccount {
+	return &CreateAccount{ContractIndex: cIdx}
 }
 
-// Read snapshot operation in binary format from a file.
-func ReadCreateAccountOperation(file *os.File) (StateOperation, error) {
-	data := new(CreateAccountOperation)
+// Read create account operation in binary format from a file.
+func ReadCreateAccount(file *os.File) (Operation, error) {
+	data := new(CreateAccount)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
-// Write a snapshot operation in binary format to file.
-func (op *CreateAccountOperation) Write(f *os.File) {
+// Write a create account operation in binary format to file.
+func (op *CreateAccount) WriteOperation(f *os.File) {
 	var data = []any{op.ContractIndex}
 	writeSlice(f, data)
 }
 
-// Execute snapshot operation.
-func (op *CreateAccountOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+// Execute create account operation.
+func (op *CreateAccount) Execute(db state.StateDB, ctx *DictionaryContext) {
 	contract := ctx.getContract(op.ContractIndex)
 	db.CreateAccount(contract)
 }
 
 // Print a debug message for snapshot operation.
-func (op *CreateAccountOperation) Debug(ctx *DictionaryContext) {
+func (op *CreateAccount) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\n", ctx.getContract(op.ContractIndex))
 }
 
@@ -479,48 +479,42 @@ func (op *CreateAccountOperation) Debug(ctx *DictionaryContext) {
 ////////////////////////////////////////////////////////////
 
 // GetBalance datastructure with returned snapshot id
-type GetBalanceOperation struct {
-	Writable
+type GetBalance struct {
 	ContractIndex uint32
 }
 
 // Return snapshot operation identifier.
-func (op *GetBalanceOperation) GetOpId() int {
-	return GetBalanceOperationID
+func (op *GetBalance) GetOpId() byte {
+	return GetBalanceID
 }
 
 // Create a new snapshot operation.
-func NewGetBalanceOperation(cIdx uint32) *GetBalanceOperation {
-	return &GetBalanceOperation{ContractIndex: cIdx}
+func NewGetBalance(cIdx uint32) *GetBalance {
+	return &GetBalance{ContractIndex: cIdx}
 }
 
 // Read snapshot operation from a file.
-func ReadGetBalanceOperation(file *os.File) (*GetBalanceOperation, error) {
-	data := new(GetBalanceOperation)
+func ReadGetBalance(file *os.File) (Operation, error) {
+	data := new(GetBalance)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
-// Return writeable interface
-func (op *GetBalanceOperation) GetWritable() *Writable {
-	return &op.Writable
-}
-
 // Write a snapshot operation.
-func (op *GetBalanceOperation) Write(f *os.File) {
-	var data = []any{op.Writable.Get(), op.ContractIndex}
-	WriteSlice(f, data)
+func (op *GetBalance) WriteOperation(f *os.File) {
+	var data = []any{op.ContractIndex}
+	writeSlice(f, data)
 }
 
 // Execute state operation
-func (op *GetBalanceOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
+func (op *GetBalance) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
 	db.GetBalance(contract)
 }
 
 // Print a debug message
-func (op *GetBalanceOperation) Debug(ctx *ExecutionContext) {
-	fmt.Printf("\tcontract: %v\n", getContract(ctx,op.ContractIndex))
+func (op *GetBalance) Debug(ctx *DictionaryContext) {
+	fmt.Printf("\tcontract: %v\n", ctx.getContract(op.ContractIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -528,48 +522,42 @@ func (op *GetBalanceOperation) Debug(ctx *ExecutionContext) {
 ////////////////////////////////////////////////////////////
 
 // GetCodeHash datastructure with returned snapshot id
-type GetCodeHashOperation struct {
-	Writable
+type GetCodeHash struct {
 	ContractIndex uint32
 }
 
 // Return snapshot operation identifier.
-func (op *GetCodeHashOperation) GetOpId() int {
-	return GetCodeHashOperationID
+func (op *GetCodeHash) GetOpId() byte {
+	return GetCodeHashID
 }
 
 // Create a new snapshot operation.
-func NewGetCodeHashOperation(cIdx uint32) *GetCodeHashOperation {
-	return &GetCodeHashOperation{ContractIndex: cIdx}
+func NewGetCodeHash(cIdx uint32) *GetCodeHash {
+	return &GetCodeHash{ContractIndex: cIdx}
 }
 
 // Read snapshot operation from a file.
-func ReadGetCodeHashOperation(file *os.File) (*GetCodeHashOperation, error) {
-	data := new(GetCodeHashOperation)
+func ReadGetCodeHash(file *os.File) (Operation, error) {
+	data := new(GetCodeHash)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
-// Return writeable interface
-func (op *GetCodeHashOperation) GetWritable() *Writable {
-	return &op.Writable
-}
-
 // Write a snapshot operation.
-func (op *GetCodeHashOperation) Write(f *os.File) {
-	var data = []any{op.Writable.Get(), op.ContractIndex}
-	WriteSlice(f, data)
+func (op *GetCodeHash) WriteOperation(f *os.File) {
+	var data = []any{op.ContractIndex}
+	writeSlice(f, data)
 }
 
 // Execute state operation
-func (op *GetCodeHashOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
+func (op *GetCodeHash) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
 	db.GetCodeHash(contract)
 }
 
 // Print a debug message
-func (op *GetCodeHashOperation) Debug(ctx *ExecutionContext) {
-	fmt.Printf("\tcontract: %v\n", getContract(ctx,op.ContractIndex))
+func (op *GetCodeHash) Debug(ctx *DictionaryContext) {
+	fmt.Printf("\tcontract: %v\n", ctx.getContract(op.ContractIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -577,48 +565,42 @@ func (op *GetCodeHashOperation) Debug(ctx *ExecutionContext) {
 ////////////////////////////////////////////////////////////
 
 // Suicide datastructure with returned snapshot id
-type SuicideOperation struct {
-	Writable
+type Suicide struct {
 	ContractIndex uint32
 }
 
 // Return snapshot operation identifier.
-func (op *SuicideOperation) GetOpId() int {
-	return SuicideOperationID
+func (op *Suicide) GetOpId() byte {
+	return SuicideID
 }
 
 // Create a new snapshot operation.
-func NewSuicideOperation(cIdx uint32) *SuicideOperation {
-	return &SuicideOperation{ContractIndex: cIdx}
+func NewSuicide(cIdx uint32) *Suicide {
+	return &Suicide{ContractIndex: cIdx}
 }
 
 // Read snapshot operation from a file.
-func ReadSuicideOperation(file *os.File) (*SuicideOperation, error) {
-	data := new(SuicideOperation)
+func ReadSuicide(file *os.File) (Operation, error) {
+	data := new(Suicide)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
-// Return writeable interface
-func (op *SuicideOperation) GetWritable() *Writable {
-	return &op.Writable
-}
-
 // Write a snapshot operation.
-func (op *SuicideOperation) Write(f *os.File) {
-	var data = []any{op.Writable.Get(), op.ContractIndex}
-	WriteSlice(f, data)
+func (op *Suicide) WriteOperation(f *os.File) {
+	var data = []any{op.ContractIndex}
+	writeSlice(f, data)
 }
 
 // Execute state operation
-func (op *SuicideOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
+func (op *Suicide) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
 	db.Suicide(contract)
 }
 
 // Print a debug message
-func (op *SuicideOperation) Debug(ctx *ExecutionContext) {
-	fmt.Printf("\tcontract: %v\n", getContract(ctx, op.ContractIndex))
+func (op *Suicide) Debug(ctx *DictionaryContext) {
+	fmt.Printf("\tcontract: %v\n", ctx.getContract(op.ContractIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -626,48 +608,42 @@ func (op *SuicideOperation) Debug(ctx *ExecutionContext) {
 ////////////////////////////////////////////////////////////
 
 // Exist datastructure with returned snapshot id
-type ExistOperation struct {
-	Writable
+type Exist struct {
 	ContractIndex uint32
 }
 
 // Return snapshot operation identifier.
-func (op *ExistOperation) GetOpId() int {
-	return ExistOperationID
+func (op *Exist) GetOpId() byte {
+	return ExistID
 }
 
 // Create a new snapshot operation.
-func NewExistOperation(cIdx uint32) *ExistOperation {
-	return &ExistOperation{ContractIndex: cIdx}
+func NewExist(cIdx uint32) *Exist {
+	return &Exist{ContractIndex: cIdx}
 }
 
 // Read snapshot operation from a file.
-func ReadExistOperation(file *os.File) (*ExistOperation, error) {
-	data := new(ExistOperation)
+func ReadExist(file *os.File) (Operation, error) {
+	data := new(Exist)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
-// Return writeable interface
-func (op *ExistOperation) GetWritable() *Writable {
-	return &op.Writable
-}
-
 // Write a snapshot operation.
-func (op *ExistOperation) Write(f *os.File) {
-	var data = []any{op.Writable.Get(), op.ContractIndex}
-	WriteSlice(f, data)
+func (op *Exist) WriteOperation(f *os.File) {
+	var data = []any{op.ContractIndex}
+	writeSlice(f, data)
 }
 
 // Execute state operation
-func (op *ExistOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
+func (op *Exist) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
 	db.Exist(contract)
 }
 
 // Print a debug message
-func (op *ExistOperation) Debug(ctx *ExecutionContext) {
-	fmt.Printf("\tcontract: %v\n", getContract(ctx, op.ContractIndex))
+func (op *Exist) Debug(ctx *DictionaryContext) {
+	fmt.Printf("\tcontract: %v\n", ctx.getContract(op.ContractIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -675,47 +651,40 @@ func (op *ExistOperation) Debug(ctx *ExecutionContext) {
 ////////////////////////////////////////////////////////////
 
 // Finalise datastructure with returned snapshot id
-type FinaliseOperation struct {
-	Writable
+type Finalise struct {
 	DeleteEmptyObjects bool // encoded contract address
 }
 
 // Return snapshot operation identifier.
-func (op *FinaliseOperation) GetOpId() int {
-	return FinaliseOperationID
+func (op *Finalise) GetOpId() byte {
+	return FinaliseID
 }
 
 // Create a new snapshot operation.
-func NewFinaliseOperation(deleteEmptyObjects bool) *FinaliseOperation {
-	return &FinaliseOperation{DeleteEmptyObjects: deleteEmptyObjects}
+func NewFinalise(deleteEmptyObjects bool) *Finalise {
+	return &Finalise{DeleteEmptyObjects: deleteEmptyObjects}
 }
 
 // Read snapshot operation from a file.
-func ReadFinaliseOperation(file *os.File) (*FinaliseOperation, error) {
-	data := new(FinaliseOperation)
+func ReadFinalise(file *os.File) (Operation, error) {
+	data := new(Finalise)
 	err := binary.Read(file, binary.LittleEndian, data)
 	return data, err
 }
 
-// Return writeable interface
-func (op *FinaliseOperation) GetWritable() *Writable {
-	return &op.Writable
-}
-
 // Write a snapshot operation.
-func (op *FinaliseOperation) Write(f *os.File) {
-	// group information into data slice
-	var data = []any{op.Writable.Get(), op.DeleteEmptyObjects}
-	WriteSlice(f, data)
+func (op *Finalise) WriteOperation(f *os.File) {
+	var data = []any{op.DeleteEmptyObjects}
+	writeSlice(f, data)
 }
 
 // Execute state operation
-func (op *FinaliseOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+func (op *Finalise) Execute(db state.StateDB, ctx *DictionaryContext) {
 	db.Finalise(op.DeleteEmptyObjects)
 }
 
 // Print a debug message
-func (op *FinaliseOperation) Debug(ctx *ExecutionContext) {
+func (op *Finalise) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tdelete empty objects: %v\n",op.DeleteEmptyObjects)
 }
 
@@ -724,32 +693,32 @@ func (op *FinaliseOperation) Debug(ctx *ExecutionContext) {
 ////////////////////////////////////////////////////////////
 
 // End-transaction operation's datastructure
-type EndTransactionOperation struct {
+type EndTransaction struct {
 }
 
 // Return end-transaction operation identifier.
-func (op *EndTransactionOperation) GetOpId() byte {
-	return EndTransactionOperationID
+func (op *EndTransaction) GetOpId() byte {
+	return EndTransactionID
 }
 
 // Create a new end-transaction operation.
-func NewEndTransactionOperation() *EndTransactionOperation {
-	return &EndTransactionOperation{}
+func NewEndTransaction() *EndTransaction {
+	return &EndTransaction{}
 }
 
 // Read snapshot operation in binary format from a file.
-func ReadEndTransactionOperation(file *os.File) (StateOperation, error) {
-	return NewEndTransactionOperation(), nil
+func ReadEndTransaction(file *os.File) (Operation, error) {
+	return NewEndTransaction(), nil
 }
 
 // Write a end-transaction operation in binary format to file.
-func (op *EndTransactionOperation) Write(f *os.File) {
+func (op *EndTransaction) WriteOperation(f *os.File) {
 }
 
 // Execute end-transaction operation.
-func (op *EndTransactionOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+func (op *EndTransaction) Execute(db state.StateDB, ctx *DictionaryContext) {
 }
 
 // Print a debug message for end-transaction.
-func (op *EndTransactionOperation) Debug(*DictionaryContext) {
+func (op *EndTransaction) Debug(*DictionaryContext) {
 }

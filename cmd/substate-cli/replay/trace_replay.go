@@ -27,7 +27,42 @@ The substate-cli trace-replay command requires two arguments:
 last block of the inclusive range of blocks to replay storage traces.`,
 }
 
-func storageDriver(first uint64, last uint64) {
+// comareStorage compares substae after replay traces to recorded substate
+func compareStorage(recordedAlloc substate.SubstateAlloc, traceAlloc substate.SubstateAlloc) error {
+	for account, xAlloc := range recordedAlloc {
+		// account exists in both substate
+		if yAlloc, exist := traceAlloc[account]; exist {
+			for k, xv := range xAlloc.Storage {
+				// mismatched value or key dones't exist
+				if yv, exist := yAlloc.Storage[k]; !exist || xv != yv {
+					return fmt.Errorf("Error: mismatched value at storage key %v. want %v have %v\n", k, xv, yv)
+				}
+			}
+			for k, yv := range yAlloc.Storage {
+				// key exists when expecting nil
+				if xv, exist := xAlloc.Storage[k]; !exist {
+					return fmt.Errorf("Error: mismatched value at storage key %v. want %v have %v\n", k, xv, yv)
+				}
+			}
+		} else {
+			// checks for accounts that don't exists in replayed substate
+			if len(xAlloc.Storage) > 0 {
+				return fmt.Errorf("Error: account %v doesn't exist\n", account)
+			}
+			//else ignores accounts which has no storage
+		}
+	}
+
+	// checks for unexpected accounts in replayed substate
+	for account, _ := range traceAlloc {
+		if _, exist := recordedAlloc[account]; !exist {
+			return fmt.Errorf("Error: unexpected account %v\n", account)
+		}
+	}
+	return nil
+}
+
+func storageDriver(first uint64, last uint64) error {
 	// load dictionaries & indexes
 	dCtx := tracer.ReadDictionaryContext() 
 	iCtx := tracer.ReadIndexContext()
@@ -57,30 +92,20 @@ func storageDriver(first uint64, last uint64) {
 			tracer.Debug(dCtx, op)
 
 			//find end of transaction
-			if op.GetOpId() == tracer.EndTransactionOperationID {
+			if op.GetOpId() == tracer.EndTransactionID {
 				break
 			}
 		}
 
-		//db.Finalise(true)
-
 		//Compare stateDB and OuputAlloc
-		outputAlloc := db.GetSubstatePostAlloc()
+		traceAlloc := db.GetSubstatePostAlloc()
 		recordedAlloc := tx.Substate.OutputAlloc
-		for account, xAlloc := range recordedAlloc {
-			if yAlloc, exist := outputAlloc[account]; exist {
-				for k, xv := range xAlloc.Storage {
-					if yv, exist := yAlloc.Storage[k]; !exist || xv != yv {
-						fmt.Printf("Error: mismatched value at storage key %v. want %v have %v\n", k, xv, yv)
-					}
-
-				}
-			} else {
-				fmt.Printf("Error: account %v doesn't exist\n", account)
-			}
-
+		err := compareStorage(recordedAlloc, traceAlloc)
+		if err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 // record-replay: func traceReplayAction for replaying
@@ -101,7 +126,6 @@ func traceReplayAction(ctx *cli.Context) error {
 	substate.OpenSubstateDBReadOnly()
 	defer substate.CloseSubstateDB()
 
-	storageDriver(first, last)
-
+	err = storageDriver(first, last)
 	return err
 }

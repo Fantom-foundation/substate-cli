@@ -57,7 +57,7 @@ func (sDict *ValueDictionary) Decode(idx uint64) (common.Hash, error) {
 // Write dictionary to a binary file.
 func (sDict *ValueDictionary) Write(filename string) error {
 	// open storage dictionary file for writing
-	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (sDict *ValueDictionary) Read(filename string) error {
 	sDict.Init()
 
 	// open storage dictionary file for reading
-	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_RDONLY, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}
