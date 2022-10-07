@@ -18,9 +18,14 @@ const GetCommittedStateOperationID = 2
 const SnapshotOperationID = 3
 const RevertToSnapshotOperationID = 4
 const CreateAccountOperationID = 5
-const EndTransactionOperationID = 6 //last
-const BeginBlockOperationID = 7
-const EndBlockOperationID = 8
+const GetBalanceOperationID = 6
+const GetCodeHashOperationID = 7
+const SuicideOperationID = 8
+const ExistOperationID = 9
+const FinaliseOperationID = 10
+const EndTransactionOperationID = 11 //last
+const BeginBlockOperationID = 12
+const EndBlockOperationID = 13
 
 // Number of state operation identifiers
 const NumOperations = EndBlockOperationID + 1 //last op + 1
@@ -37,7 +42,12 @@ var idToLabel = [NumOperations]string{
 	"Snapshot",
 	"RevertToSnapshot",
 	"CreateAccount",
-	"EndOfTransaction",
+	"GetBalance",
+	"GetCodeHash",
+	"Suicide",
+	"Exist",
+	"Finalise",
+	"EndTransaction",
 	// Pseudo Operations
 	"BeginBlock",
 	"EndBlock",
@@ -417,7 +427,7 @@ func (op *RevertToSnapshotOperation) Execute(db state.StateDB, ctx *DictionaryCo
 }
 
 // Print a debug message for revert-to-snapshot operation.
-func (op *RevertToSnapshotOperation) Debug(*DictionaryContext) {
+func (op *RevertToSnapshotOperation) Debug(ctx *ExecutionContext) {
 	fmt.Printf("\tsnapshot id: %v\n", op.SnapshotID)
 }
 
@@ -465,7 +475,252 @@ func (op *CreateAccountOperation) Debug(ctx *DictionaryContext) {
 }
 
 ////////////////////////////////////////////////////////////
-// End of Transaction Operation
+// GetBalance Operation
+////////////////////////////////////////////////////////////
+
+// GetBalance datastructure with returned snapshot id
+type GetBalanceOperation struct {
+	Writable
+	ContractIndex uint32
+}
+
+// Return snapshot operation identifier.
+func (op *GetBalanceOperation) GetOpId() int {
+	return GetBalanceOperationID
+}
+
+// Create a new snapshot operation.
+func NewGetBalanceOperation(cIdx uint32) *GetBalanceOperation {
+	return &GetBalanceOperation{ContractIndex: cIdx}
+}
+
+// Read snapshot operation from a file.
+func ReadGetBalanceOperation(file *os.File) (*GetBalanceOperation, error) {
+	data := new(GetBalanceOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (op *GetBalanceOperation) GetWritable() *Writable {
+	return &op.Writable
+}
+
+// Write a snapshot operation.
+func (op *GetBalanceOperation) Write(f *os.File) {
+	var data = []any{op.Writable.Get(), op.ContractIndex}
+	WriteSlice(f, data)
+}
+
+// Execute state operation
+func (op *GetBalanceOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+	contract := getContract(ctx, op.ContractIndex)
+	db.GetBalance(contract)
+}
+
+// Print a debug message
+func (op *GetBalanceOperation) Debug(ctx *ExecutionContext) {
+	fmt.Printf("\tcontract: %v\n", getContract(ctx,op.ContractIndex))
+}
+
+////////////////////////////////////////////////////////////
+// GetCodeHash Operation
+////////////////////////////////////////////////////////////
+
+// GetCodeHash datastructure with returned snapshot id
+type GetCodeHashOperation struct {
+	Writable
+	ContractIndex uint32
+}
+
+// Return snapshot operation identifier.
+func (op *GetCodeHashOperation) GetOpId() int {
+	return GetCodeHashOperationID
+}
+
+// Create a new snapshot operation.
+func NewGetCodeHashOperation(cIdx uint32) *GetCodeHashOperation {
+	return &GetCodeHashOperation{ContractIndex: cIdx}
+}
+
+// Read snapshot operation from a file.
+func ReadGetCodeHashOperation(file *os.File) (*GetCodeHashOperation, error) {
+	data := new(GetCodeHashOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (op *GetCodeHashOperation) GetWritable() *Writable {
+	return &op.Writable
+}
+
+// Write a snapshot operation.
+func (op *GetCodeHashOperation) Write(f *os.File) {
+	var data = []any{op.Writable.Get(), op.ContractIndex}
+	WriteSlice(f, data)
+}
+
+// Execute state operation
+func (op *GetCodeHashOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+	contract := getContract(ctx, op.ContractIndex)
+	db.GetCodeHash(contract)
+}
+
+// Print a debug message
+func (op *GetCodeHashOperation) Debug(ctx *ExecutionContext) {
+	fmt.Printf("\tcontract: %v\n", getContract(ctx,op.ContractIndex))
+}
+
+////////////////////////////////////////////////////////////
+// Suicide Operation
+////////////////////////////////////////////////////////////
+
+// Suicide datastructure with returned snapshot id
+type SuicideOperation struct {
+	Writable
+	ContractIndex uint32
+}
+
+// Return snapshot operation identifier.
+func (op *SuicideOperation) GetOpId() int {
+	return SuicideOperationID
+}
+
+// Create a new snapshot operation.
+func NewSuicideOperation(cIdx uint32) *SuicideOperation {
+	return &SuicideOperation{ContractIndex: cIdx}
+}
+
+// Read snapshot operation from a file.
+func ReadSuicideOperation(file *os.File) (*SuicideOperation, error) {
+	data := new(SuicideOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (op *SuicideOperation) GetWritable() *Writable {
+	return &op.Writable
+}
+
+// Write a snapshot operation.
+func (op *SuicideOperation) Write(f *os.File) {
+	var data = []any{op.Writable.Get(), op.ContractIndex}
+	WriteSlice(f, data)
+}
+
+// Execute state operation
+func (op *SuicideOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+	contract := getContract(ctx, op.ContractIndex)
+	db.Suicide(contract)
+}
+
+// Print a debug message
+func (op *SuicideOperation) Debug(ctx *ExecutionContext) {
+	fmt.Printf("\tcontract: %v\n", getContract(ctx, op.ContractIndex))
+}
+
+////////////////////////////////////////////////////////////
+// Exist Operation
+////////////////////////////////////////////////////////////
+
+// Exist datastructure with returned snapshot id
+type ExistOperation struct {
+	Writable
+	ContractIndex uint32
+}
+
+// Return snapshot operation identifier.
+func (op *ExistOperation) GetOpId() int {
+	return ExistOperationID
+}
+
+// Create a new snapshot operation.
+func NewExistOperation(cIdx uint32) *ExistOperation {
+	return &ExistOperation{ContractIndex: cIdx}
+}
+
+// Read snapshot operation from a file.
+func ReadExistOperation(file *os.File) (*ExistOperation, error) {
+	data := new(ExistOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (op *ExistOperation) GetWritable() *Writable {
+	return &op.Writable
+}
+
+// Write a snapshot operation.
+func (op *ExistOperation) Write(f *os.File) {
+	var data = []any{op.Writable.Get(), op.ContractIndex}
+	WriteSlice(f, data)
+}
+
+// Execute state operation
+func (op *ExistOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+	contract := getContract(ctx, op.ContractIndex)
+	db.Exist(contract)
+}
+
+// Print a debug message
+func (op *ExistOperation) Debug(ctx *ExecutionContext) {
+	fmt.Printf("\tcontract: %v\n", getContract(ctx, op.ContractIndex))
+}
+
+////////////////////////////////////////////////////////////
+// Finalise Operation
+////////////////////////////////////////////////////////////
+
+// Finalise datastructure with returned snapshot id
+type FinaliseOperation struct {
+	Writable
+	DeleteEmptyObjects bool // encoded contract address
+}
+
+// Return snapshot operation identifier.
+func (op *FinaliseOperation) GetOpId() int {
+	return FinaliseOperationID
+}
+
+// Create a new snapshot operation.
+func NewFinaliseOperation(deleteEmptyObjects bool) *FinaliseOperation {
+	return &FinaliseOperation{DeleteEmptyObjects: deleteEmptyObjects}
+}
+
+// Read snapshot operation from a file.
+func ReadFinaliseOperation(file *os.File) (*FinaliseOperation, error) {
+	data := new(FinaliseOperation)
+	err := binary.Read(file, binary.LittleEndian, data)
+	return data, err
+}
+
+// Return writeable interface
+func (op *FinaliseOperation) GetWritable() *Writable {
+	return &op.Writable
+}
+
+// Write a snapshot operation.
+func (op *FinaliseOperation) Write(f *os.File) {
+	// group information into data slice
+	var data = []any{op.Writable.Get(), op.DeleteEmptyObjects}
+	WriteSlice(f, data)
+}
+
+// Execute state operation
+func (op *FinaliseOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+	db.Finalise(op.DeleteEmptyObjects)
+}
+
+// Print a debug message
+func (op *FinaliseOperation) Debug(ctx *ExecutionContext) {
+	fmt.Printf("\tdelete empty objects: %v\n",op.DeleteEmptyObjects)
+}
+
+////////////////////////////////////////////////////////////
+// End of transaction Operation
 ////////////////////////////////////////////////////////////
 
 // End-transaction operation's datastructure

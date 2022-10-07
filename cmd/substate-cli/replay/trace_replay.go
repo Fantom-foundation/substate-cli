@@ -17,6 +17,7 @@ var TraceReplayCommand = cli.Command{
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
 		substate.SubstateDirFlag,
+		TraceDirectoryFlag,
 	},
 	Description: `
 The substate-cli trace-replay command requires two arguments:
@@ -47,7 +48,9 @@ func storageDriver(first uint64, last uint64) {
 		if tx.Block > last {
 			break
 		}
+		//db := state.MakeOffTheChainStateDB(tx.Substate.InputAlloc)
 		db := state.MakeOffTheChainStateDB(tx.Substate.InputAlloc)
+		fmt.Printf("Block %v Tx %v\n", tx.Block, tx.Transaction)
 		for traceIter.Next() {
 			op := traceIter.Value()
 			op.Execute(db, dCtx)
@@ -59,7 +62,7 @@ func storageDriver(first uint64, last uint64) {
 			}
 		}
 
-		db.Finalise(true)
+		//db.Finalise(true)
 
 		//Compare stateDB and OuputAlloc
 		outputAlloc := db.GetSubstatePostAlloc()
@@ -84,7 +87,7 @@ func storageDriver(first uint64, last uint64) {
 func traceReplayAction(ctx *cli.Context) error {
 	var err error
 
-	tracer.TraceDir = ctx.String(TraceDirectoryFlag.Name)
+	tracer.TraceDir = ctx.String(TraceDirectoryFlag.Name) + "/"
 
 	if len(ctx.Args()) != 2 {
 		return fmt.Errorf("substate-cli replay-trace command requires exactly 2 arguments")

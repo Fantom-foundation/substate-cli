@@ -1,6 +1,8 @@
 package tracer
 
 import (
+	"fmt"
+	"log"
 	"math/big"
 
 	"github.com/Fantom-foundation/substate-cli/state"
@@ -8,6 +10,33 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/substate"
 )
+
+// Encode a given contract address and return a contract index.
+func encodeContract(ctx *ExecutionContext, contract common.Address) uint32 {
+	cIdx, err := ctx.ContractDictionary.Encode(contract)
+	if err != nil {
+		log.Fatalf("Contract could not be encoded, error: %v", err)
+	}
+	return cIdx
+}
+
+// Endcode a given storage address and retrun a storage address index.
+func encodeStorage(ctx *ExecutionContext, storage common.Hash) uint32 {
+	sIdx, err := ctx.StorageDictionary.Encode(storage)
+	if err != nil {
+		log.Fatalf("Storage could not be encoded, error: %v", err)
+	}
+	return sIdx
+}
+
+// Encode a storage value and return a value index.
+func encodeValue(ctx *ExecutionContext, value common.Hash) uint64 {
+	vIdx, err := ctx.ValueDictionary.Encode(value)
+	if err != nil {
+		log.Fatalf("Value could not be encoded, error: %v", err)
+	}
+	return vIdx
+}
 
 type StateProxyDB struct {
 	db   state.StateDB // state db
@@ -24,8 +53,8 @@ func NewStateProxyDB(db state.StateDB, dctx *DictionaryContext, ch chan StateOpe
 }
 
 func (s *StateProxyDB) CreateAccount(addr common.Address) {
-	contractIdx, _ := s.dctx.ContractDictionary.Encode(addr)
-	s.ch <- NewCreateAccountOperation(contractIdx)
+	cIdx := encodeContract(s.ectx, addr)
+	s.ch <- NewCreateAccountOperation(cIdx)
 	s.db.CreateAccount(addr)
 }
 
@@ -38,6 +67,8 @@ func (s *StateProxyDB) AddBalance(addr common.Address, amount *big.Int) {
 }
 
 func (s *StateProxyDB) GetBalance(addr common.Address) *big.Int {
+	cIdx := encodeContract(s.ectx, addr)
+	s.ch <- NewGetBalanceOperation(cIdx)
 	balance := s.db.GetBalance(addr)
 	return balance
 }
@@ -52,6 +83,8 @@ func (s *StateProxyDB) SetNonce(addr common.Address, nonce uint64) {
 }
 
 func (s *StateProxyDB) GetCodeHash(addr common.Address) common.Hash {
+	cIdx := encodeContract(s.ectx, addr)
+	s.ch <- NewGetCodeHashOperation(cIdx)
 	hash := s.db.GetCodeHash(addr)
 	return hash
 }
@@ -84,42 +117,46 @@ func (s *StateProxyDB) GetRefund() uint64 {
 }
 
 func (s *StateProxyDB) GetCommittedState(addr common.Address, key common.Hash) common.Hash {
-	contractIdx, _ := s.dctx.ContractDictionary.Encode(addr)
-	storageIdx, _ := s.dctx.StorageDictionary.Encode(key)
-	s.ch <- NewGetCommittedStateOperation(contractIdx, storageIdx)
+	cIdx := encodeContract(s.ectx, addr)
+	sIdx := encodeStorage(s.ectx, key)
+	s.ch <- NewGetCommittedStateOperation(cIdx, sIdx)
 	value := s.db.GetCommittedState(addr, key)
 	return value
 }
 
 func (s *StateProxyDB) GetState(addr common.Address, key common.Hash) common.Hash {
-	contractIdx, _ := s.dctx.ContractDictionary.Encode(addr)
-	storageIdx, _ := s.dctx.StorageDictionary.Encode(key)
-	s.ch <- NewGetStateOperation(contractIdx, storageIdx)
+	cIdx := encodeContract(s.ectx, addr)
+	sIdx := encodeStorage(s.ectx, key)
+	s.ch <- NewGetStateOperation(cIdx, sIdx)
 	value := s.db.GetState(addr, key)
 	return value
 }
 
 func (s *StateProxyDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
-	cIdx, _ := s.dctx.ContractDictionary.Encode(addr)
-	sIdx, _ := s.dctx.StorageDictionary.Encode(key)
-	vIdx, _ := s.dctx.ValueDictionary.Encode(value)
+	cIdx := encodeContract(s.ectx, addr)
+	sIdx := encodeStorage(s.ectx, key)
+	vIdx := encodeValue(s.ectx, value)
 	s.ch <- NewSetStateOperation(cIdx, sIdx, vIdx)
 	s.db.SetState(addr, key, value)
 }
 
 func (s *StateProxyDB) Suicide(addr common.Address) bool {
+	cIdx := encodeContract(s.ectx, addr)
+	s.ch <- NewSuicideOperation(cIdx)
 	ok := s.db.Suicide(addr)
 	return ok
 }
 
 func (s *StateProxyDB) HasSuicided(addr common.Address) bool {
 	hasSuicided := s.db.HasSuicided(addr)
+	fmt.Printf("hasSuicided :%v\n", hasSuicided)
 	return hasSuicided
 }
 
 func (s *StateProxyDB) Exist(addr common.Address) bool {
-	exists := s.db.Exist(addr)
-	return exists
+	cIdx := encodeContract(s.ectx, addr)
+	s.ch <- NewExistOperation(cIdx)
+	return s.db.Exist(addr)
 }
 
 func (s *StateProxyDB) Empty(addr common.Address) bool {
@@ -178,6 +215,7 @@ func (s *StateProxyDB) Prepare(thash common.Hash, ti int) {
 }
 
 func (s *StateProxyDB) Finalise(deleteEmptyObjects bool) {
+	s.ch <- NewFinaliseOperation(deleteEmptyObjects)
 	s.db.Finalise(deleteEmptyObjects)
 }
 
