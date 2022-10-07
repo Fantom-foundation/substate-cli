@@ -30,10 +30,8 @@ func storageDriver(first uint64, last uint64) {
 	// load dictionaries
 	dCtx := tracer.ReadDictionaryContext()
 
-	// create and load indexes
-	blockIndex := tracer.NewBlockIndex()
-	blockIndex.Read("operation-index.dat")
-	iCtx := &tracer.IndexContext{BlockIndex: blockIndex}
+	// load indexes
+	iCtx := tracer.ReadIndexContext()
 
 	// Create dummy statedb to make it compile
 	// TODO: plug-in real DBs and prime DB at block "first"
@@ -41,6 +39,7 @@ func storageDriver(first uint64, last uint64) {
 	// iterate substate (for in-membory state)
 	stateIter := substate.NewSubstateIterator(first, 4)
 	defer stateIter.Release()
+
 	// replay storage trace
 	traceIter := tracer.NewTraceIterator(iCtx, first, last)
 	defer traceIter.Release()

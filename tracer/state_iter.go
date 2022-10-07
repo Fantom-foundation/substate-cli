@@ -5,17 +5,12 @@ import (
 	"os"
 )
 
-// IndexContext keeps all index data strutures for the iterator.
-type IndexContext struct {
-	BlockIndex *BlockIndex
-}
-
 // Iterator data structure for storage traces
 type TraceIterator struct {
-	lastBlock uint64
-	iCtx      *IndexContext
-	file      *os.File
-	currentOp StateOperation
+	lastBlock uint64         // last block to process
+	iCtx      *IndexContext  // index context
+	file      *os.File       // trace file
+	currentOp StateOperation // current state operation
 }
 
 // Create new trace iterator.
@@ -30,15 +25,26 @@ func NewTraceIterator(iCtx *IndexContext, first uint64, last uint64) *TraceItera
 	if err != nil {
 		log.Fatalf("Cannot open trace file.")
 	}
-
 	// TODO: set file position to the first position using seek
-
+	//_, err := file.Seek(iCtx.BlockIndex.Get(first), 0)
+	//if err != nil {
+	//		log.Fatalf("Cannot set position in trace file. Error: %v", err)
+	//}
 	return p
 }
 
 // Get next state operation from trace file.
 func (ti *TraceIterator) Next() bool {
-	// TODO: if file position succeeds last block, return false.
+	// TODO: get file position for checking last
+	//pos, err := file.Seek(0, 1)
+	//if err != nil {
+	//		log.Fatalf("Cannot set position in trace file. Error: %v", err)
+	//}
+	// if iCtx.BlockIndex.Exists(ti.last+1) {
+	//  if pos >= iCtx.BlockIndex.Get(ti.last+1) {
+	//       return false
+	//  }
+	// }
 	ti.currentOp = Read(ti.file)
 	return ti.currentOp == nil
 }
@@ -50,7 +56,6 @@ func (ti *TraceIterator) Value() StateOperation {
 
 // Release the storage trace iterator.
 func (ti *TraceIterator) Release() {
-	// close trace file
 	err := ti.file.Close()
 	if err != nil {
 		log.Fatalf("Cannot close trace file")

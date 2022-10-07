@@ -195,7 +195,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 }
 
 // Read state operations from channel and write them into their files.
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, blockIndex *tracer.BlockIndex, dCtx *tracer.DictionaryContext) {
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, dCtx *tracer.DictionaryContext, iCtx *tracer.IndexContext) {
 	defer close(done)
 
 	// open trace file
@@ -225,7 +225,7 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 					if err != nil {
 						log.Fatalf("Cannot retrieve current file position. Error: %v", err)
 					}
-					blockIndex.Add(tOp.BlockNumber, offset)
+					iCtx.BlockIndex.Add(tOp.BlockNumber, offset)
 				case tracer.EndBlockOperationID:
 					_, ok := op.(*tracer.EndBlockOperation)
 					if !ok {
@@ -261,12 +261,12 @@ func traceAction(ctx *cli.Context) error {
 	}
 
 	dCtx := tracer.NewDictionaryContext()
-	blockIndex := tracer.NewBlockIndex()
+	iCtx := tracer.NewIndexContext()
 	opChannel := make(chan tracer.StateOperation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
-	go StateOperationWriter(cctx, cancelChannel, opChannel, blockIndex, dCtx)
+	go StateOperationWriter(cctx, cancelChannel, opChannel, dCtx, iCtx)
 	defer func() {
 		// cancel writers
 		(cancel)()        // stop writer
@@ -314,8 +314,7 @@ func traceAction(ctx *cli.Context) error {
 
 	// write dictionaries and indexes
 	dCtx.Write()
-
-	blockIndex.Write("operation-index.dat")
+	iCtx.Write()
 
 	return err
 }

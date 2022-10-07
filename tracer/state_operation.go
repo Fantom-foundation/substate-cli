@@ -79,8 +79,8 @@ func GetLabel(i byte) string {
 
 // State-operation interface
 type StateOperation interface {
-	GetOpId() byte                            // obtain operation identifier
-	Write(*os.File)                           // write operation
+	GetOpId() byte                             // obtain operation identifier
+	Write(*os.File)                            // write operation
 	Execute(state.StateDB, *DictionaryContext) // execute operation
 	Debug(*DictionaryContext)                  // print debug message for operation
 }
