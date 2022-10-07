@@ -19,20 +19,12 @@ const SnapshotOperationID = 3
 const RevertToSnapshotOperationID = 4
 const CreateAccountOperationID = 5
 const EndTransactionOperationID = 6 //last
-
-// Number of write operations
-const NumWriteOperations = EndTransactionOperationID + 1
-
-// Operation IDs
-// Pseudo Operations (not stored on file but generated while recording)
-const BeginBlockOperationID = NumWriteOperations
-const EndBlockOperationID = NumWriteOperations + 1
+const BeginBlockOperationID = 7
+const EndBlockOperationID = 8
 
 // Number of state operation identifiers
 const NumOperations = EndBlockOperationID + 1 //last op + 1
 
-// Number of pseudo operations that are not written to a file
-const NumPseudoOperations = NumOperations - NumWriteOperations
 
 // Output directory
 var TraceDir string = "./"
@@ -52,7 +44,7 @@ var idToLabel = [NumOperations]string{
 }
 
 // State operation's read functions
-var readFunction = [NumWriteOperations]func(*os.File) (StateOperation, error){
+var readFunction = [NumOperations]func(*os.File) (StateOperation, error){
 	ReadGetStateOperation,
 	ReadSetStateOperation,
 	ReadGetCommittedStateOperation,
@@ -96,15 +88,13 @@ func Read(f *os.File) StateOperation {
 	if err == io.EOF {
 		return nil
 	} else if err != nil {
-		log.Fatalf("Cannot read ID from file")
+		log.Fatalf("Cannot read ID from file. Error:%v", err)
+	}
+	if ID >= NumOperations {
+		log.Fatalf("ID out of range %v", ID)
 	}
 
 	// read state operation in binary format from file
-	if ID >= NumWriteOperations && ID < NumOperations {
-		log.Fatalf("Cannot read pseudo-operation %v from file", GetLabel(ID))
-	} else {
-		log.Fatalf("ID out of range %v", ID)
-	}
 	op, err = readFunction[ID](f)
 	if err != nil {
 		log.Fatalf("Failed to read operation %v. Error %v", GetLabel(ID), err)
@@ -166,12 +156,10 @@ func NewBeginBlockOperation(bbNum uint64) *BeginBlockOperation {
 
 // Write block operation (should never be invoked).
 func (bb *BeginBlockOperation) Write(files *os.File) {
-	log.Fatalf("Begin-block operation for block %v attempted to be written", bb.BlockNumber)
 }
 
 // Execute state operation.
 func (bb *BeginBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
-	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.BlockNumber)
 }
 
 // Print a debug message.
@@ -200,12 +188,10 @@ func NewEndBlockOperation(ebNum uint64) *EndBlockOperation {
 
 // Write end-block operation (should never be invoked).
 func (eb *EndBlockOperation) Write(files *os.File) {
-	log.Fatalf("End-block operation for block %v attempted to be written", eb.BlockNumber)
 }
 
 // Execute state operation.
 func (eb *EndBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
-	log.Fatalf("End-block operation for block %v attempted to be executed", eb.BlockNumber)
 }
 
 // Print a debug message

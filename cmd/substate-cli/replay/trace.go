@@ -214,29 +214,22 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 			tracer.Debug(dCtx, op)
 
 			// is it a pseudo operation?
-			if op.GetOpId() >= tracer.NumWriteOperations {
-				switch op.GetOpId() {
-				case tracer.BeginBlockOperationID:
-					tOp, ok := op.(*tracer.BeginBlockOperation)
-					if !ok {
-						log.Fatalf("Begin block operation downcasting failed")
-					}
-					offset, err := file.Seek(0, 1)
-					if err != nil {
-						log.Fatalf("Cannot retrieve current file position. Error: %v", err)
-					}
-					iCtx.BlockIndex.Add(tOp.BlockNumber, offset)
-				case tracer.EndBlockOperationID:
-					_, ok := op.(*tracer.EndBlockOperation)
-					if !ok {
-						log.Fatalf("Block operation downcasting failed")
-					}
-				default:
-					log.Fatalf("Unhandled pseudo operation")
+			switch op.GetOpId() {
+			case tracer.BeginBlockOperationID:
+				tOp, ok := op.(*tracer.BeginBlockOperation)
+				if !ok {
+					log.Fatalf("Begin block operation downcasting failed")
 				}
-				continue
+				offset, err := file.Seek(0, 1)
+				if err != nil {
+					log.Fatalf("Cannot retrieve current file position. Error: %v", err)
+				}
+				iCtx.BlockIndex.Add(tOp.BlockNumber, offset)
+
+			default:
+				tracer.Write(file, op)
 			}
-			tracer.Write(file, op)
+
 
 		case <-ctx.Done():
 			if len(ch) == 0 {
