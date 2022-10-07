@@ -27,10 +27,8 @@ last block of the inclusive range of blocks to replay storage traces.`,
 }
 
 func storageDriver(first uint64, last uint64) {
-	// load dictionaries
-	dCtx := tracer.ReadDictionaryContext()
-
-	// load indexes
+	// load dictionaries & indexes
+	dCtx := tracer.ReadDictionaryContext() 
 	iCtx := tracer.ReadIndexContext()
 
 	// Create dummy statedb to make it compile

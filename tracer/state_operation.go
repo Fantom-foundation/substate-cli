@@ -11,6 +11,7 @@ import (
 )
 
 // Stored Operations
+// TODO: Remove word Operation from ID constants
 const GetStateOperationID = 0
 const SetStateOperationID = 1
 const GetCommittedStateOperationID = 2
@@ -73,11 +74,8 @@ func GetLabel(i byte) string {
 // State Operation Interface
 ////////////////////////////////////////////////////////////
 
-// TODO: Perhaps have in future two interfaces for
-//       1) Pseudo Operations (not having Write/Execute)
-//       2) Writable Operations
-
 // State-operation interface
+// TODO: Rename StateOperation to Operation
 type StateOperation interface {
 	GetOpId() byte                             // obtain operation identifier
 	Write(*os.File)                            // write operation
@@ -86,6 +84,7 @@ type StateOperation interface {
 }
 
 // Read a state operation from file.
+// TODO: Rename Read to ReadOperation
 func Read(f *os.File) StateOperation {
 	var (
 		op StateOperation
@@ -117,6 +116,7 @@ func Read(f *os.File) StateOperation {
 }
 
 // Write state operation to file.
+// TODO: Rename Write to WriteOperation
 func Write(f *os.File, op StateOperation) {
 	// write ID to file
 	ID := op.GetOpId()
@@ -142,6 +142,8 @@ func Debug(ctx *DictionaryContext, op StateOperation) {
 	fmt.Printf("%v:\n", GetLabel(op.GetOpId()))
 	op.Debug(ctx)
 }
+
+// TODO: Remove from Operation from following structs 
 
 ////////////////////////////////////////////////////////////
 // Begin Block Operation (Pseudo Operation)
