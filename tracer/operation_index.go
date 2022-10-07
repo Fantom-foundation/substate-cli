@@ -7,36 +7,36 @@ import (
 	"os"
 )
 
-// OperationIndex maps a block number to the first operation number in the block.
-type OperationIndex struct {
-	blockToOperation map[uint64]uint64 // block number -> operation number
+// BlockIndex maps a block number to a file position where its first state operation is stored.
+type BlockIndex struct {
+	blockToFPos map[uint64]int64 // block number -> file position
 }
 
 // Initialize an operation index.
-func (oIdx *OperationIndex) Init() {
-	oIdx.blockToOperation = make(map[uint64]uint64)
+func (oIdx *BlockIndex) Init() {
+	oIdx.blockToFPos = make(map[uint64]int64)
 }
 
-// Create new OperationIndex data structure.
-func NewOperationIndex() *OperationIndex {
-	p := new(OperationIndex)
+// Create new BlockIndex data structure.
+func NewBlockIndex() *BlockIndex {
+	p := new(BlockIndex)
 	p.Init()
 	return p
 }
 
 // Add new entry.
-func (oIdx *OperationIndex) Add(block uint64, operation uint64) error {
+func (oIdx *BlockIndex) Add(block uint64, fpos int64) error {
 	var err error = nil
-	if _, ok := oIdx.blockToOperation[block]; ok {
+	if _, ok := oIdx.blockToFPos[block]; ok {
 		err = errors.New("block number already exists")
 	}
-	oIdx.blockToOperation[block] = operation
+	oIdx.blockToFPos[block] = fpos
 	return err
 }
 
 // Get operation number.
-func (oIdx *OperationIndex) Get(block uint64) (uint64, error) {
-	operation, ok := oIdx.blockToOperation[block]
+func (oIdx *BlockIndex) Get(block uint64) (int64, error) {
+	operation, ok := oIdx.blockToFPos[block]
 	if !ok {
 		return 0, errors.New("block number does not exist")
 	}
@@ -44,7 +44,7 @@ func (oIdx *OperationIndex) Get(block uint64) (uint64, error) {
 }
 
 // Write index to a binary file.
-func (oIdx *OperationIndex) Write(filename string) error {
+func (oIdx *BlockIndex) Write(filename string) error {
 	// open index file for writing
 	f, err := os.OpenFile(TraceDir+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
@@ -55,8 +55,8 @@ func (oIdx *OperationIndex) Write(filename string) error {
 	}()
 
 	// write all dictionary entries
-	for block, operation := range oIdx.blockToOperation {
-		var data = []any{block, operation}
+	for block, fpos := range oIdx.blockToFPos {
+		var data = []any{block, fpos}
 		for _, value := range data {
 			err := binary.Write(f, binary.LittleEndian, value)
 			if err != nil {
@@ -68,7 +68,7 @@ func (oIdx *OperationIndex) Write(filename string) error {
 }
 
 // Read dictionary from a binary file.
-func (oIdx *OperationIndex) Read(filename string) error {
+func (oIdx *BlockIndex) Read(filename string) error {
 	// clear storage dictionary
 	oIdx.Init()
 
@@ -85,8 +85,8 @@ func (oIdx *OperationIndex) Read(filename string) error {
 	for {
 		// read next entry
 		var data struct {
-			Block     uint64
-			Operation uint64
+			Block uint64
+			FPos  int64
 		}
 		err := binary.Read(f, binary.LittleEndian, &data)
 		if err == io.EOF {
@@ -95,7 +95,7 @@ func (oIdx *OperationIndex) Read(filename string) error {
 		if err != nil {
 			return err
 		}
-		err = oIdx.Add(data.Block, data.Operation)
+		err = oIdx.Add(data.Block, data.FPos)
 		if err != nil {
 			return err
 		}

@@ -37,11 +37,9 @@ func storageDriver(first uint64, last uint64) {
 	eCtx := tracer.NewExecutionContext(contractDict, storageDict, valueDict)
 
 	// create and load indexes
-	opIndex := tracer.NewOperationIndex()
-	opIndex.Read("operation-index.dat")
-	fposIndex := tracer.NewFilePositionIndex()
-	fposIndex.Read("filepos-index.dat")
-	iCtx := &tracer.IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
+	blockIndex := tracer.NewBlockIndex()
+	blockIndex.Read("operation-index.dat")
+	iCtx := &tracer.IndexContext{BlockIndex: blockIndex}
 
 	// Create dummy statedb to make it compile
 	// TODO: plug-in real DBs and prime DB at block "first"
@@ -50,7 +48,7 @@ func storageDriver(first uint64, last uint64) {
 	stateIter := substate.NewSubstateIterator(first, 4)
 	defer stateIter.Release()
 	// replay storage trace
-	traceIter := tracer.NewStorageTraceIterator(iCtx, first, last)
+	traceIter := tracer.NewTraceIterator(iCtx, first, last)
 	defer traceIter.Release()
 
 	for stateIter.Next() {
@@ -61,11 +59,11 @@ func storageDriver(first uint64, last uint64) {
 		db := state.MakeOffTheChainStateDB(tx.Substate.InputAlloc)
 		for traceIter.Next() {
 			op := traceIter.Value()
-			(*op).Execute(db, eCtx)
+			op.Execute(db, eCtx)
 			tracer.Debug(eCtx, op)
 
 			//find end of transaction
-			if (*op).GetOpId() == tracer.EndTransactionOperationID {
+			if op.GetOpId() == tracer.EndTransactionOperationID {
 				break
 			}
 		}

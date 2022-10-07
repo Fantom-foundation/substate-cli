@@ -7,75 +7,52 @@ import (
 
 // IndexContext keeps all index data strutures for the iterator.
 type IndexContext struct {
-	FilePositionIndex *FilePositionIndex
-	OperationIndex    *OperationIndex
+	BlockIndex *BlockIndex
 }
 
 // Iterator data structure for storage traces
 type TraceIterator struct {
 	lastBlock uint64
 	iCtx      *IndexContext
-	files     []*os.File
-	nextOp    []*StateOperation
-	currentOp *StateOperation
+	file      *os.File
+	currentOp StateOperation
 }
 
-// Create new storage trace iterator.
-func NewStorageTraceIterator(iCtx *IndexContext, first uint64, last uint64) *TraceIterator {
+// Create new trace iterator.
+func NewTraceIterator(iCtx *IndexContext, first uint64, last uint64) *TraceIterator {
 	p := new(TraceIterator)
 	p.iCtx = iCtx
 	p.lastBlock = last
-	p.files = make([]*os.File, NumWriteOperations)
-	p.nextOp = make([]*StateOperation, NumWriteOperations)
-	for i := 0; i < NumWriteOperations; i++ {
-		f, err := os.OpenFile(GetFilename(i), os.O_RDONLY|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatalf("Cannot open state operation file %v. Filename %v", i, GetFilename(i))
-		}
-		p.files[i] = f
-		p.nextOp[i] = Read(f, i)
+
+	// TODO: Add trace directory to filename
+	var err error
+	p.file, err = os.OpenFile("trace.dat", os.O_RDONLY|os.O_CREATE, 0644)
+	if err != nil {
+		log.Fatalf("Cannot open trace file.")
 	}
 
-	// TODO: skipping the first blocks (using the file-position and operation index)
+	// TODO: set file position to the first position using seek
+
 	return p
 }
 
-// Release the storage trace iterator. This closes all associated files
-func (ti *TraceIterator) Release() {
-	for i := 0; i < NumWriteOperations; i++ {
-		err := ti.files[i].Close()
-		if err != nil {
-			log.Fatalf("Cannot close state operation file %v", i)
-		}
-	}
-}
-
-// Get next state operation. The next state
-// operation is found by searching over all state operation
-// types and finding the operation that has the smallest
-// operation sequence number.
+// Get next state operation from trace file.
 func (ti *TraceIterator) Next() bool {
-	// TODO: make this more efficient
-	minIdx := -1
-	for i := 0; i < NumWriteOperations; i++ {
-		if ti.nextOp[i] != nil {
-			if minIdx == -1 {
-				minIdx = i
-			} else if (*ti.nextOp[i]).GetWritable().Get() < (*ti.nextOp[minIdx]).GetWritable().Get() {
-				minIdx = i
-			}
-		}
-	}
-	if minIdx == -1 {
-		return false
-	} else {
-		ti.currentOp = ti.nextOp[minIdx]
-		ti.nextOp[minIdx] = Read(ti.files[minIdx], minIdx)
-		return true
-	}
+	// TODO: if file position succeeds last block, return false.
+	ti.currentOp = Read(ti.file)
+	return ti.currentOp == nil
 }
 
 // Retrieve current state operation of the iterator.
-func (ti *TraceIterator) Value() *StateOperation {
+func (ti *TraceIterator) Value() StateOperation {
 	return ti.currentOp
+}
+
+// Release the storage trace iterator.
+func (ti *TraceIterator) Release() {
+	// close trace file
+	err := ti.file.Close()
+	if err != nil {
+		log.Fatalf("Cannot close trace file")
+	}
 }
