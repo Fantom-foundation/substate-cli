@@ -27,14 +27,8 @@ last block of the inclusive range of blocks to replay storage traces.`,
 }
 
 func storageDriver(first uint64, last uint64) {
-	// create and load dictionaries
-	contractDict := tracer.NewContractDictionary()
-	contractDict.Read("contract-dictionary.dat")
-	storageDict := tracer.NewStorageDictionary()
-	storageDict.Read("storage-dictionary.dat")
-	valueDict := tracer.NewValueDictionary()
-	valueDict.Read("value-dictionary.dat")
-	eCtx := tracer.NewExecutionContext(contractDict, storageDict, valueDict)
+	// load dictionaries
+	dCtx := tracer.ReadDictionaryContext()
 
 	// create and load indexes
 	blockIndex := tracer.NewBlockIndex()
@@ -59,8 +53,8 @@ func storageDriver(first uint64, last uint64) {
 		db := state.MakeOffTheChainStateDB(tx.Substate.InputAlloc)
 		for traceIter.Next() {
 			op := traceIter.Value()
-			op.Execute(db, eCtx)
-			tracer.Debug(eCtx, op)
+			op.Execute(db, dCtx)
+			tracer.Debug(dCtx, op)
 
 			//find end of transaction
 			if op.GetOpId() == tracer.EndTransactionOperationID {

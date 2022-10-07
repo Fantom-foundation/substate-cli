@@ -61,7 +61,7 @@ type TraceConfig struct {
 }
 
 // traceTask generates storage traces for each transaction
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, ectx *tracer.ExecutionContext, ch chan tracer.StateOperation) error {
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, dCtx *tracer.DictionaryContext, ch chan tracer.StateOperation) error {
 
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
@@ -107,7 +107,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	} else {
 		statedb = state.MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = tracer.NewStateProxyDB(statedb, ectx, ch)
+	statedb = tracer.NewStateProxyDB(statedb, dCtx, ch)
 
 	// Apply Message
 	var (
@@ -195,7 +195,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 }
 
 // Read state operations from channel and write them into their files.
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, blockIndex *tracer.BlockIndex, ectx *tracer.ExecutionContext) {
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, blockIndex *tracer.BlockIndex, dCtx *tracer.DictionaryContext) {
 	defer close(done)
 
 	// open trace file
@@ -208,10 +208,10 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 	for {
 		select {
 		case op := <-ch:
-			// TODO: have flag for debug information 
+			// TODO: have flag for debug information
 
-			// print debug information 
-			tracer.Debug(ectx, op)
+			// print debug information
+			tracer.Debug(dCtx, op)
 
 			// is it a pseudo operation?
 			if op.GetOpId() >= tracer.NumWriteOperations {
@@ -260,19 +260,13 @@ func traceAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli trace command requires exactly 2 arguments")
 	}
 
-	// create dictionaries and their context
-	cDict := tracer.NewContractDictionary()
-	sDict := tracer.NewStorageDictionary()
-	vDict := tracer.NewValueDictionary()
-
-	ectx := tracer.NewExecutionContext(cDict, sDict, vDict)
-
+	dCtx := tracer.NewDictionaryContext()
 	blockIndex := tracer.NewBlockIndex()
 	opChannel := make(chan tracer.StateOperation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
-	go StateOperationWriter(cctx, cancelChannel, opChannel, blockIndex, ectx)
+	go StateOperationWriter(cctx, cancelChannel, opChannel, blockIndex, dCtx)
 	defer func() {
 		// cancel writers
 		(cancel)()        // stop writer
@@ -314,14 +308,13 @@ func traceAction(ctx *cli.Context) error {
 			// open new block with a begin-block operation
 			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
-		traceTask(config, tx.Block, tx.Transaction, tx.Substate, ectx, opChannel)
+		traceTask(config, tx.Block, tx.Transaction, tx.Substate, dCtx, opChannel)
 		opChannel <- tracer.NewEndTransactionOperation()
 	}
 
 	// write dictionaries and indexes
-	cDict.Write("contract-dictionary.dat")
-	sDict.Write("storage-dictionary.dat")
-	vDict.Write("value-dictionary.dat")
+	dCtx.Write()
+
 	blockIndex.Write("operation-index.dat")
 
 	return err

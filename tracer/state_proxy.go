@@ -11,20 +11,20 @@ import (
 
 type StateProxyDB struct {
 	db   state.StateDB // state db
-	ectx *ExecutionContext
+	dctx *DictionaryContext
 	ch   chan StateOperation
 }
 
-func NewStateProxyDB(db state.StateDB, ectx *ExecutionContext, ch chan StateOperation) state.StateDB {
+func NewStateProxyDB(db state.StateDB, dctx *DictionaryContext, ch chan StateOperation) state.StateDB {
 	p := new(StateProxyDB)
 	p.db = db
-	p.ectx = ectx
+	p.dctx = dctx
 	p.ch = ch
 	return p
 }
 
 func (s *StateProxyDB) CreateAccount(addr common.Address) {
-	contractIdx, _ := s.ectx.ContractDictionary.Encode(addr)
+	contractIdx, _ := s.dctx.ContractDictionary.Encode(addr)
 	s.ch <- NewCreateAccountOperation(contractIdx)
 	s.db.CreateAccount(addr)
 }
@@ -84,25 +84,25 @@ func (s *StateProxyDB) GetRefund() uint64 {
 }
 
 func (s *StateProxyDB) GetCommittedState(addr common.Address, key common.Hash) common.Hash {
-	contractIdx, _ := s.ectx.ContractDictionary.Encode(addr)
-	storageIdx, _ := s.ectx.StorageDictionary.Encode(key)
+	contractIdx, _ := s.dctx.ContractDictionary.Encode(addr)
+	storageIdx, _ := s.dctx.StorageDictionary.Encode(key)
 	s.ch <- NewGetCommittedStateOperation(contractIdx, storageIdx)
 	value := s.db.GetCommittedState(addr, key)
 	return value
 }
 
 func (s *StateProxyDB) GetState(addr common.Address, key common.Hash) common.Hash {
-	contractIdx, _ := s.ectx.ContractDictionary.Encode(addr)
-	storageIdx, _ := s.ectx.StorageDictionary.Encode(key)
+	contractIdx, _ := s.dctx.ContractDictionary.Encode(addr)
+	storageIdx, _ := s.dctx.StorageDictionary.Encode(key)
 	s.ch <- NewGetStateOperation(contractIdx, storageIdx)
 	value := s.db.GetState(addr, key)
 	return value
 }
 
 func (s *StateProxyDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
-	cIdx, _ := s.ectx.ContractDictionary.Encode(addr)
-	sIdx, _ := s.ectx.StorageDictionary.Encode(key)
-	vIdx, _ := s.ectx.ValueDictionary.Encode(value)
+	cIdx, _ := s.dctx.ContractDictionary.Encode(addr)
+	sIdx, _ := s.dctx.StorageDictionary.Encode(key)
+	vIdx, _ := s.dctx.ValueDictionary.Encode(value)
 	s.ch <- NewSetStateOperation(cIdx, sIdx, vIdx)
 	s.db.SetState(addr, key, value)
 }

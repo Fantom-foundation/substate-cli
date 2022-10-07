@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/Fantom-foundation/substate-cli/state"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 // Stored Operations
@@ -71,50 +70,6 @@ func GetLabel(i byte) string {
 }
 
 ////////////////////////////////////////////////////////////
-// Execution Context
-////////////////////////////////////////////////////////////
-
-// ExecutionContext contains the contract/storage dictionaries
-// so that a recorded StateDB operation can be executed.
-type ExecutionContext struct {
-	ContractDictionary *ContractDictionary // dictionary to compact contract addresses
-	StorageDictionary  *StorageDictionary  // dictionary to compact storage addresses
-	ValueDictionary    *ValueDictionary    // dictionary to compact storage values
-}
-
-// Create new execution context.
-func NewExecutionContext(cDict *ContractDictionary, sDict *StorageDictionary, vDict *ValueDictionary) *ExecutionContext {
-	return &ExecutionContext{ContractDictionary: cDict, StorageDictionary: sDict, ValueDictionary: vDict}
-}
-
-// Get the contract address for a given contract index.
-func getContract(ctx *ExecutionContext, cIdx uint32) common.Address {
-	contract, err := ctx.ContractDictionary.Decode(cIdx)
-	if err != nil {
-		log.Fatalf("Contract index could not be decoded, error: %v", err)
-	}
-	return contract
-}
-
-// Get the storage address for a given storage address index.
-func getStorage(ctx *ExecutionContext, sIdx uint32) common.Hash {
-	storage, err := ctx.StorageDictionary.Decode(sIdx)
-	if err != nil {
-		log.Fatalf("Storage index could not be decoded, error: %v", err)
-	}
-	return storage
-}
-
-// Get the storage value for a given value index.
-func getValue(ctx *ExecutionContext, vIdx uint64) common.Hash {
-	value, err := ctx.ValueDictionary.Decode(vIdx)
-	if err != nil {
-		log.Fatalf("Value index could not be decoded, error: %v", err)
-	}
-	return value
-}
-
-////////////////////////////////////////////////////////////
 // State Operation Interface
 ////////////////////////////////////////////////////////////
 
@@ -126,8 +81,8 @@ func getValue(ctx *ExecutionContext, vIdx uint64) common.Hash {
 type StateOperation interface {
 	GetOpId() byte                            // obtain operation identifier
 	Write(*os.File)                           // write operation
-	Execute(state.StateDB, *ExecutionContext) // execute operation
-	Debug(*ExecutionContext)                  // print debug message for operation
+	Execute(state.StateDB, *DictionaryContext) // execute operation
+	Debug(*DictionaryContext)                  // print debug message for operation
 }
 
 // Read a state operation from file.
@@ -183,7 +138,7 @@ func writeSlice(f *os.File, data []any) {
 }
 
 // Print debug information of a state operation.
-func Debug(ctx *ExecutionContext, op StateOperation) {
+func Debug(ctx *DictionaryContext, op StateOperation) {
 	fmt.Printf("%v:\n", GetLabel(op.GetOpId()))
 	op.Debug(ctx)
 }
@@ -213,12 +168,12 @@ func (bb *BeginBlockOperation) Write(files *os.File) {
 }
 
 // Execute state operation.
-func (bb *BeginBlockOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+func (bb *BeginBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
 	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.BlockNumber)
 }
 
 // Print a debug message.
-func (bb *BeginBlockOperation) Debug(ctx *ExecutionContext) {
+func (bb *BeginBlockOperation) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tblock number: %v\n", bb.BlockNumber)
 }
 
@@ -247,12 +202,12 @@ func (eb *EndBlockOperation) Write(files *os.File) {
 }
 
 // Execute state operation.
-func (eb *EndBlockOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+func (eb *EndBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
 	log.Fatalf("End-block operation for block %v attempted to be executed", eb.BlockNumber)
 }
 
 // Print a debug message
-func (eb *EndBlockOperation) Debug(ctx *ExecutionContext) {
+func (eb *EndBlockOperation) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tblock number: %v\n", eb.BlockNumber)
 }
 
@@ -290,17 +245,17 @@ func (op *GetStateOperation) Write(f *os.File) {
 }
 
 // Execute get-state operation.
-func (op *GetStateOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
-	storage := getStorage(ctx, op.StorageIndex)
+func (op *GetStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
+	storage := ctx.getStorage(op.StorageIndex)
 	db.GetState(contract, storage)
 }
 
 // Print a debug message.
-func (op *GetStateOperation) Debug(ctx *ExecutionContext) {
+func (op *GetStateOperation) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\t storage: %v\n",
-		getContract(ctx, op.ContractIndex),
-		getStorage(ctx, op.StorageIndex))
+		ctx.getContract(op.ContractIndex),
+		ctx.getStorage(op.StorageIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -338,19 +293,19 @@ func (op *SetStateOperation) Write(f *os.File) {
 }
 
 // Execute set-state operation.
-func (op *SetStateOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
-	storage := getStorage(ctx, op.StorageIndex)
-	value := getValue(ctx, op.ValueIndex)
+func (op *SetStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
+	storage := ctx.getStorage(op.StorageIndex)
+	value := ctx.getValue(op.ValueIndex)
 	db.SetState(contract, storage, value)
 }
 
 // Print a debug message.
-func (op *SetStateOperation) Debug(ctx *ExecutionContext) {
+func (op *SetStateOperation) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\t storage: %v\t value: %v\n",
-		getContract(ctx, op.ContractIndex),
-		getStorage(ctx, op.StorageIndex),
-		getValue(ctx, op.ValueIndex))
+		ctx.getContract(op.ContractIndex),
+		ctx.getStorage(op.StorageIndex),
+		ctx.getValue(op.ValueIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -387,17 +342,17 @@ func (op *GetCommittedStateOperation) Write(f *os.File) {
 }
 
 // Execute get-committed-state operation.
-func (op *GetCommittedStateOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
-	storage := getStorage(ctx, op.StorageIndex)
+func (op *GetCommittedStateOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
+	storage := ctx.getStorage(op.StorageIndex)
 	db.GetCommittedState(contract, storage)
 }
 
 // Print details of get-committed-state operation
-func (op *GetCommittedStateOperation) Debug(ctx *ExecutionContext) {
+func (op *GetCommittedStateOperation) Debug(ctx *DictionaryContext) {
 	fmt.Printf("\tcontract: %v\t storage: %v\n",
-		getContract(ctx, op.ContractIndex),
-		getStorage(ctx, op.StorageIndex))
+		ctx.getContract(op.ContractIndex),
+		ctx.getStorage(op.StorageIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -428,12 +383,12 @@ func (op *SnapshotOperation) Write(f *os.File) {
 }
 
 // Execute the snapshot operation.
-func (op *SnapshotOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+func (op *SnapshotOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
 	db.Snapshot()
 }
 
 // Print the details for the snapshot operation.
-func (op *SnapshotOperation) Debug(*ExecutionContext) {
+func (op *SnapshotOperation) Debug(*DictionaryContext) {
 }
 
 ////////////////////////////////////////////////////////////
@@ -469,12 +424,12 @@ func (op *RevertToSnapshotOperation) Write(f *os.File) {
 }
 
 // Execute revert-to-snapshot operation.
-func (op *RevertToSnapshotOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+func (op *RevertToSnapshotOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
 	db.RevertToSnapshot(op.SnapshotID)
 }
 
 // Print a debug message for revert-to-snapshot operation.
-func (op *RevertToSnapshotOperation) Debug(*ExecutionContext) {
+func (op *RevertToSnapshotOperation) Debug(*DictionaryContext) {
 	fmt.Printf("\tsnapshot id: %v\n", op.SnapshotID)
 }
 
@@ -511,14 +466,14 @@ func (op *CreateAccountOperation) Write(f *os.File) {
 }
 
 // Execute snapshot operation.
-func (op *CreateAccountOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
-	contract := getContract(ctx, op.ContractIndex)
+func (op *CreateAccountOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
+	contract := ctx.getContract(op.ContractIndex)
 	db.CreateAccount(contract)
 }
 
 // Print a debug message for snapshot operation.
-func (op *CreateAccountOperation) Debug(ctx *ExecutionContext) {
-	fmt.Printf("\tcontract: %v\n", getContract(ctx, op.ContractIndex))
+func (op *CreateAccountOperation) Debug(ctx *DictionaryContext) {
+	fmt.Printf("\tcontract: %v\n", ctx.getContract(op.ContractIndex))
 }
 
 ////////////////////////////////////////////////////////////
@@ -549,9 +504,9 @@ func (op *EndTransactionOperation) Write(f *os.File) {
 }
 
 // Execute end-transaction operation.
-func (op *EndTransactionOperation) Execute(db state.StateDB, ctx *ExecutionContext) {
+func (op *EndTransactionOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
 }
 
 // Print a debug message for end-transaction.
-func (op *EndTransactionOperation) Debug(*ExecutionContext) {
+func (op *EndTransactionOperation) Debug(*DictionaryContext) {
 }
