@@ -61,7 +61,7 @@ type TraceConfig struct {
 }
 
 // traceTask generates storage traces for each transaction
-func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, ectx *tracer.ExecutionContext, ch chan tracer.StateOperation) error {
+func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Substate, dCtx *tracer.DictionaryContext, ch chan tracer.StateOperation) error {
 
 	if config.only_successful && recording.Result.Status != types.ReceiptStatusSuccessful {
 		return nil
@@ -107,7 +107,7 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 	} else {
 		statedb = state.MakeOffTheChainStateDB(inputAlloc)
 	}
-	statedb = tracer.NewStateProxyDB(statedb, ectx, ch)
+	statedb = tracer.NewStateProxyDB(statedb, dCtx, ch)
 
 	// Apply Message
 	var (
@@ -195,29 +195,25 @@ func traceTask(config TraceConfig, block uint64, tx int, recording *substate.Sub
 }
 
 // Read state operations from channel and write them into their files.
-func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, opIndex *tracer.OperationIndex, fposIndex *tracer.FilePositionIndex, ectx *tracer.ExecutionContext) {
+func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan tracer.StateOperation, dCtx *tracer.DictionaryContext, iCtx *tracer.IndexContext) {
 	defer close(done)
 
-	// open files for writeable state operations
-	files := make([]*os.File, tracer.NumWriteOperations)
-	for i := 0; i < tracer.NumWriteOperations; i++ {
-		f, err := os.OpenFile(tracer.GetFilename(i), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			log.Fatalf("Cannot open state operation file %v", i)
-		}
-		files[i] = f
+	// open trace file
+	file, err := os.OpenFile("trace.dat", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("Cannot open trace file. Error: %v", err)
 	}
-
-	// create operation number and file position array
-	var (
-		opNum = uint64(0)
-		fpos  [tracer.NumWriteOperations]uint64
-	)
 
 	// read from channel until receiving cancel signal
 	for {
 		select {
 		case op := <-ch:
+			// TODO: have flag for debug information
+
+			// print debug information
+			tracer.Debug(dCtx, op)
+
+			// is it a pseudo operation?
 			if op.GetOpId() >= tracer.NumWriteOperations {
 				switch op.GetOpId() {
 				case tracer.BeginBlockOperationID:
@@ -225,10 +221,11 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 					if !ok {
 						log.Fatalf("Begin block operation downcasting failed")
 					}
-					opIndex.Add(tOp.BlockNumber, opNum)
-					if tOp.BlockNumber%FPosBlockMultiple == 0 {
-						fposIndex.Add(tOp.BlockNumber, fpos)
+					offset, err := file.Seek(0, 1)
+					if err != nil {
+						log.Fatalf("Cannot retrieve current file position. Error: %v", err)
 					}
+					iCtx.BlockIndex.Add(tOp.BlockNumber, offset)
 				case tracer.EndBlockOperationID:
 					_, ok := op.(*tracer.EndBlockOperation)
 					if !ok {
@@ -237,24 +234,9 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 				default:
 					log.Fatalf("Unhandled pseudo operation")
 				}
-				tracer.Debug(ectx, &op)
 				continue
 			}
-			// set operation number
-			op.GetWritable().Set(opNum)
-
-			// compute index
-			i := op.GetOpId()
-
-			// write object to file
-			op.Write(files[i])
-			tracer.Debug(ectx, &op)
-
-			// update operation number
-			opNum++
-
-			// update file-position counters
-			fpos[i]++
+			tracer.Write(file, op)
 
 		case <-ctx.Done():
 			if len(ch) == 0 {
@@ -263,12 +245,10 @@ func StateOperationWriter(ctx context.Context, done chan struct{}, ch chan trace
 		}
 	}
 
-	// close state operations' files
-	for i := 0; i < tracer.NumWriteOperations; i++ {
-		err := files[i].Close()
-		if err != nil {
-			log.Fatalf("Cannot close state operation file %v", i)
-		}
+	// close trace file
+	err = file.Close()
+	if err != nil {
+		log.Fatalf("Cannot close trace file. Error: %v", err)
 	}
 }
 
@@ -280,20 +260,13 @@ func traceAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli trace command requires exactly 2 arguments")
 	}
 
-	// create dictionaries and their context
-	cDict := tracer.NewContractDictionary()
-	sDict := tracer.NewStorageDictionary()
-	vDict := tracer.NewValueDictionary()
-
-	ectx := tracer.NewExecutionContext(cDict, sDict, vDict)
-
-	opIndex := tracer.NewOperationIndex()
-	fposIndex := tracer.NewFilePositionIndex()
+	dCtx := tracer.NewDictionaryContext()
+	iCtx := tracer.NewIndexContext()
 	opChannel := make(chan tracer.StateOperation, 10000)
 
 	cctx, cancel := context.WithCancel(context.Background())
 	cancelChannel := make(chan struct{})
-	go StateOperationWriter(cctx, cancelChannel, opChannel, opIndex, fposIndex, ectx)
+	go StateOperationWriter(cctx, cancelChannel, opChannel, dCtx, iCtx)
 	defer func() {
 		// cancel writers
 		(cancel)()        // stop writer
@@ -335,16 +308,13 @@ func traceAction(ctx *cli.Context) error {
 			// open new block with a begin-block operation
 			opChannel <- tracer.NewBeginBlockOperation(tx.Block)
 		}
-		traceTask(config, tx.Block, tx.Transaction, tx.Substate, ectx, opChannel)
+		traceTask(config, tx.Block, tx.Transaction, tx.Substate, dCtx, opChannel)
 		opChannel <- tracer.NewEndTransactionOperation()
 	}
 
 	// write dictionaries and indexes
-	cDict.Write("contract-dictionary.dat")
-	sDict.Write("storage-dictionary.dat")
-	vDict.Write("value-dictionary.dat")
-	opIndex.Write("operation-index.dat")
-	fposIndex.Write("filepos-index.dat")
+	dCtx.Write()
+	iCtx.Write()
 
 	return err
 }

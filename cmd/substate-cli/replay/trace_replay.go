@@ -27,21 +27,9 @@ last block of the inclusive range of blocks to replay storage traces.`,
 }
 
 func storageDriver(first uint64, last uint64) {
-	// create and load dictionaries
-	contractDict := tracer.NewContractDictionary()
-	contractDict.Read("contract-dictionary.dat")
-	storageDict := tracer.NewStorageDictionary()
-	storageDict.Read("storage-dictionary.dat")
-	valueDict := tracer.NewValueDictionary()
-	valueDict.Read("value-dictionary.dat")
-	eCtx := tracer.NewExecutionContext(contractDict, storageDict, valueDict)
-
-	// create and load indexes
-	opIndex := tracer.NewOperationIndex()
-	opIndex.Read("operation-index.dat")
-	fposIndex := tracer.NewFilePositionIndex()
-	fposIndex.Read("filepos-index.dat")
-	iCtx := &tracer.IndexContext{OperationIndex: opIndex, FilePositionIndex: fposIndex}
+	// load dictionaries & indexes
+	dCtx := tracer.ReadDictionaryContext() 
+	iCtx := tracer.ReadIndexContext()
 
 	// Create dummy statedb to make it compile
 	// TODO: plug-in real DBs and prime DB at block "first"
@@ -49,8 +37,9 @@ func storageDriver(first uint64, last uint64) {
 	// iterate substate (for in-membory state)
 	stateIter := substate.NewSubstateIterator(first, 4)
 	defer stateIter.Release()
+
 	// replay storage trace
-	traceIter := tracer.NewStorageTraceIterator(iCtx, first, last)
+	traceIter := tracer.NewTraceIterator(iCtx, first, last)
 	defer traceIter.Release()
 
 	for stateIter.Next() {
@@ -61,11 +50,11 @@ func storageDriver(first uint64, last uint64) {
 		db := state.MakeOffTheChainStateDB(tx.Substate.InputAlloc)
 		for traceIter.Next() {
 			op := traceIter.Value()
-			(*op).Execute(db, eCtx)
-			tracer.Debug(eCtx, op)
+			op.Execute(db, dCtx)
+			tracer.Debug(dCtx, op)
 
 			//find end of transaction
-			if (*op).GetOpId() == tracer.EndTransactionOperationID {
+			if op.GetOpId() == tracer.EndTransactionOperationID {
 				break
 			}
 		}
