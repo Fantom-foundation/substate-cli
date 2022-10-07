@@ -156,12 +156,10 @@ func NewBeginBlockOperation(bbNum uint64) *BeginBlockOperation {
 
 // Write block operation (should never be invoked).
 func (bb *BeginBlockOperation) Write(files *os.File) {
-	log.Fatalf("Begin-block operation for block %v attempted to be written", bb.BlockNumber)
 }
 
 // Execute state operation.
 func (bb *BeginBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
-	log.Fatalf("Begin-block operation for block %v attempted to be executed", bb.BlockNumber)
 }
 
 // Print a debug message.
@@ -190,12 +188,10 @@ func NewEndBlockOperation(ebNum uint64) *EndBlockOperation {
 
 // Write end-block operation (should never be invoked).
 func (eb *EndBlockOperation) Write(files *os.File) {
-	log.Fatalf("End-block operation for block %v attempted to be written", eb.BlockNumber)
 }
 
 // Execute state operation.
 func (eb *EndBlockOperation) Execute(db state.StateDB, ctx *DictionaryContext) {
-	log.Fatalf("End-block operation for block %v attempted to be executed", eb.BlockNumber)
 }
 
 // Print a debug message
