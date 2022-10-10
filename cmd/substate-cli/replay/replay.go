@@ -218,11 +218,11 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 		fmt.Printf("block: %v Transaction: %v\n", block, tx)
 		if !r {
 			fmt.Printf("inconsistent output: result\n")
-			printResultDiffSummary(outputResult, evmResult)
+			PrintResultDiffSummary(outputResult, evmResult)
 		}
 		if !a {
 			fmt.Printf("inconsistent output: alloc\n")
-			printAllocationDiffSummary(&outputAlloc, &evmAlloc)
+			PrintAllocationDiffSummary(&outputAlloc, &evmAlloc)
 		}
 		return fmt.Errorf("inconsistent output")
 	}
@@ -263,7 +263,7 @@ func printIfDifferentBigInt(label string, want, have *big.Int) bool {
 	return false
 }
 
-func printResultDiffSummary(want, have *substate.SubstateResult) {
+func PrintResultDiffSummary(want, have *substate.SubstateResult) {
 	printIfDifferent("status", want.Status, have.Status)
 	printIfDifferent("contract address", want.ContractAddress, have.ContractAddress)
 	printIfDifferent("gas usage", want.GasUsed, have.GasUsed)
@@ -285,7 +285,7 @@ func printLogDiffSummary(label string, want, have *types.Log) {
 	printIfDifferentBytes(fmt.Sprintf("%s.data", label), want.Data, have.Data)
 }
 
-func printAllocationDiffSummary(want, have *substate.SubstateAlloc) {
+func PrintAllocationDiffSummary(want, have *substate.SubstateAlloc) {
 	printIfDifferent("substate alloc size", len(*want), len(*have))
 	for key := range *want {
 		_, present := (*have)[key]
