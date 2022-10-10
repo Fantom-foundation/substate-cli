@@ -3,11 +3,14 @@
 Fantom's off-the-chain testing framework based on [Transaction Substate Recorder/Replayer](https://github.com/verovm/record-replay).
 
 ## Building the Recorder/Replayer
-To build all substate-cli, run ```make```.   You can find ```substate-cli``` binary in the build directory.
 
-```substate-cli``` module requires
- 1. ```go-opera``` from [go-opera-substate](https://github.com/Fantom-foundation/go-opera-substate) repo
- 2. ```go-ethereum``` from [go-ethereum-substate](https://github.com/Fantom-foundation/go-ethereum-substate) repo
+```substate-cli``` uses two submodules
+ 1. [go-opera-substate](https://github.com/Fantom-foundation/go-opera-substate)
+ 2. [go-ethereum-substate](https://github.com/Fantom-foundation/go-ethereum-substate)
+
+To fetch all the data from submodules, run ```git submodule init``` and ```git submodule update```.
+
+To build all substate-cli, run ```make```.   You can find ```substate-cli``` binary in the build directory.
 
 ## Running the replayer
 To replay substrate in a given block range,
