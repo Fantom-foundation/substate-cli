@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/Fantom-foundation/substate-cli/state"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -143,7 +143,7 @@ func replayForkTask(block uint64, tx int, recording *substate.Substate, taskPool
 
 	// Apply Message
 	var (
-		statedb   = MakeOffTheChainStateDB(inputAlloc)
+		statedb   = state.MakeOffTheChainStateDB(inputAlloc)
 		gaspool   = new(core.GasPool)
 		txHash    = common.Hash{0x01}
 		blockHash = common.Hash{0x02}
@@ -337,16 +337,9 @@ func replayForkAction(ctx *cli.Context) error {
 		return fmt.Errorf("substate-cli replay-fork command requires exactly 2 arguments")
 	}
 
-	first, ferr := strconv.ParseInt(strings.ReplaceAll(ctx.Args().Get(0), "_", ""), 10, 64)
-	last, lerr := strconv.ParseInt(strings.ReplaceAll(ctx.Args().Get(1), "_", ""), 10, 64)
-	if ferr != nil || lerr != nil {
-		return fmt.Errorf("substate-cli replay-fork: error in parsing parameters: block number not an integer")
-	}
-	if first < 0 || last < 0 {
-		return fmt.Errorf("substate-cli replay-fork: error: block number must be greater than 0")
-	}
-	if first > last {
-		return fmt.Errorf("substate-cli replay-fork: error: first block has larger number than last block")
+	first, last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	if argErr != nil {
+		return argErr
 	}
 
 	hardFork := ctx.Int64(HardForkFlag.Name)
@@ -399,7 +392,7 @@ func replayForkAction(ctx *cli.Context) error {
 		statWg.Done()
 	}()
 
-	taskPool := substate.NewSubstateTaskPool("substate-cli replay-fork", replayForkTask, uint64(first), uint64(last), ctx)
+	taskPool := substate.NewSubstateTaskPool("substate-cli replay-fork", replayForkTask, first, last, ctx)
 	err = taskPool.Execute()
 	if err == nil {
 		close(ReplayForkStatChan)

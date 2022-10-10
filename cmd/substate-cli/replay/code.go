@@ -3,7 +3,6 @@ package replay
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -35,12 +34,6 @@ The contracts of the block range are written into a levelDB database.
 `,
 }
 
-// contract-db filename
-var ContractDBFlag = cli.StringFlag{
-	Name:  "contractdb",
-	Usage: "Contract database name for smart contracts",
-	Value: "./contracts.db",
-}
 var ContractDB = ContractDBFlag.Value
 
 // registry to keep track the bytecode of a smart contract
@@ -101,16 +94,9 @@ func getCodeAction(ctx *cli.Context) error {
 	fmt.Printf("git-commit: %v\n", gitCommit)
 	fmt.Printf("contract-db: %v\n", ContractDB)
 
-	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
-	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)
-	if ferr != nil || lerr != nil {
-		return fmt.Errorf("substate-cli code: error in parsing parameters: block number not an integer")
-	}
-	if first < 0 || last < 0 {
-		return fmt.Errorf("substate-cli code: error: block number must be greater than 0")
-	}
-	if first > last {
-		return fmt.Errorf("substate-cli code: error: first block has larger number than last block")
+	first, last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	if argErr != nil {
+		return argErr
 	}
 
 	substate.SetSubstateFlags(ctx)
@@ -119,7 +105,7 @@ func getCodeAction(ctx *cli.Context) error {
 
 	CodeRegistry = make(map[common.Address][]byte)
 
-	taskPool := substate.NewSubstateTaskPool("substate-cli code", getCodeTask, uint64(first), uint64(last), ctx)
+	taskPool := substate.NewSubstateTaskPool("substate-cli code", getCodeTask, first, last, ctx)
 	err = taskPool.Execute()
 
 	writeContracts()

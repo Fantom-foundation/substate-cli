@@ -7,15 +7,16 @@ import (
 	"math/big"
 	"os"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/Fantom-foundation/go-opera/evmcore"
-	"github.com/Fantom-foundation/go-opera/opera"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	//"github.com/ethereum/go-ethereum/core/state"
+	"github.com/Fantom-foundation/go-opera/evmcore"
+	"github.com/Fantom-foundation/go-opera/opera"
+	"github.com/Fantom-foundation/substate-cli/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/core/vm/lfvm"
@@ -25,66 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/substate"
 	cli "gopkg.in/urfave/cli.v1"
 )
-
-var (
-	gitCommit = "" // Git SHA1 commit hash of the release (set via linker flags)
-	gitDate   = ""
-)
-
-// chain id
-var chainID int
-var ChainIDFlag = cli.IntFlag{
-	Name:  "chainid",
-	Usage: "ChainID for replayer",
-	Value: 250,
-}
-
-var ProfileEVMCallFlag = cli.BoolFlag{
-	Name:  "profiling-call",
-	Usage: "enable profiling for EVM call",
-}
-
-var MicroProfilingFlag = cli.BoolFlag{
-	Name:  "micro-profiling",
-	Usage: "enable micro-profiling of EVM",
-}
-
-var BasicBlockProfilingFlag = cli.BoolFlag{
-	Name:  "basic-block-profiling",
-	Usage: "enable profiling of basic block",
-}
-
-var OnlySuccessfulFlag = cli.BoolFlag{
-	Name:  "only-successful",
-	Usage: "only runs transactions that have been successful",
-}
-
-var InterpreterImplFlag = cli.StringFlag{
-	Name:  "interpreter",
-	Usage: "select the interpreter version to be used",
-}
-
-var CpuProfilingFlag = cli.StringFlag{
-	Name:  "cpuprofile",
-	Usage: "the file name where to write a CPU profile of the evaluation step to",
-}
-
-var UseInMemoryStateDbFlag = cli.BoolFlag{
-	Name:  "faststatedb",
-	Usage: "enables a faster, yet still experimental StateDB implementation",
-}
-
-var DatabaseNameFlag = cli.StringFlag{
-	Name:  "db",
-	Usage: "Set a database name for storing micro-profiling results",
-	Value: "./profiling.db",
-}
-
-var ChannelBufferSizeFlag = cli.IntFlag{
-	Name:  "buffer-size",
-	Usage: "Set a buffer size for profiling channel",
-	Value: 100000,
-}
 
 // record-replay: substate-cli replay command
 var ReplayCommand = cli.Command{
@@ -194,11 +135,11 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 		return h
 	}
 
-	var statedb StateDB
+	var statedb state.StateDB
 	if config.use_in_memory_db {
-		statedb = MakeInMemoryStateDB(&inputAlloc)
+		statedb = state.MakeInMemoryStateDB(&inputAlloc)
 	} else {
-		statedb = MakeOffTheChainStateDB(inputAlloc)
+		statedb = state.MakeOffTheChainStateDB(inputAlloc)
 	}
 
 	// Apply Message
@@ -277,11 +218,11 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 		fmt.Printf("block: %v Transaction: %v\n", block, tx)
 		if !r {
 			fmt.Printf("inconsistent output: result\n")
-			printResultDiffSummary(outputResult, evmResult)
+			PrintResultDiffSummary(outputResult, evmResult)
 		}
 		if !a {
 			fmt.Printf("inconsistent output: alloc\n")
-			printAllocationDiffSummary(&outputAlloc, &evmAlloc)
+			PrintAllocationDiffSummary(&outputAlloc, &evmAlloc)
 		}
 		return fmt.Errorf("inconsistent output")
 	}
@@ -322,7 +263,7 @@ func printIfDifferentBigInt(label string, want, have *big.Int) bool {
 	return false
 }
 
-func printResultDiffSummary(want, have *substate.SubstateResult) {
+func PrintResultDiffSummary(want, have *substate.SubstateResult) {
 	printIfDifferent("status", want.Status, have.Status)
 	printIfDifferent("contract address", want.ContractAddress, have.ContractAddress)
 	printIfDifferent("gas usage", want.GasUsed, have.GasUsed)
@@ -344,7 +285,7 @@ func printLogDiffSummary(label string, want, have *types.Log) {
 	printIfDifferentBytes(fmt.Sprintf("%s.data", label), want.Data, have.Data)
 }
 
-func printAllocationDiffSummary(want, have *substate.SubstateAlloc) {
+func PrintAllocationDiffSummary(want, have *substate.SubstateAlloc) {
 	printIfDifferent("substate alloc size", len(*want), len(*have))
 	for key := range *want {
 		_, present := (*have)[key]
@@ -478,16 +419,9 @@ func replayAction(ctx *cli.Context) error {
 	fmt.Printf("git-date: %v\n", gitDate)
 	fmt.Printf("git-commit: %v\n", gitCommit)
 
-	first, ferr := strconv.ParseInt(ctx.Args().Get(0), 10, 64)
-	last, lerr := strconv.ParseInt(ctx.Args().Get(1), 10, 64)
-	if ferr != nil || lerr != nil {
-		return fmt.Errorf("substate-cli replay: error in parsing parameters: block number not an integer")
-	}
-	if first < 0 || last < 0 {
-		return fmt.Errorf("substate-cli replay: error: block number must be greater than 0")
-	}
-	if first > last {
-		return fmt.Errorf("substate-cli replay: error: first block has larger number than last block")
+	first, last, argErr := SetBlockRange(ctx.Args().Get(0), ctx.Args().Get(1))
+	if argErr != nil {
+		return argErr
 	}
 
 	if ctx.Bool(ProfileEVMCallFlag.Name) {
@@ -532,7 +466,7 @@ func replayAction(ctx *cli.Context) error {
 	}
 
 	resetVmDuration()
-	taskPool := substate.NewSubstateTaskPool("substate-cli replay", task, uint64(first), uint64(last), ctx)
+	taskPool := substate.NewSubstateTaskPool("substate-cli replay", task, first, last, ctx)
 	err = taskPool.Execute()
 
 	fmt.Printf("substate-cli replay: net VM time: %v\n", getVmDuration())
