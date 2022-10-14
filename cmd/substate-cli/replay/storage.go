@@ -5,7 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/substate"
-	cli "gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 // record-replay: substate-cli storage command
@@ -15,9 +15,9 @@ var GetStorageUpdateSizeCommand = cli.Command{
 	Usage:     "returns changes in storage size by transactions in the specified block range",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
-		substate.WorkersFlag,
-		substate.SubstateDirFlag,
-		ChainIDFlag,
+		&substate.WorkersFlag,
+		&substate.SubstateDirFlag,
+		&ChainIDFlag,
 	},
 	Description: `
 The substate-cli storage-size command requires two arguments:
@@ -105,7 +105,7 @@ func getStorageUpdateSizeTask(block uint64, tx int, st *substate.Substate, taskP
 func getStorageUpdateSizeAction(ctx *cli.Context) error {
 	var err error
 
-	if len(ctx.Args()) != 2 {
+	if ctx.Args().Len() != 2 {
 		return fmt.Errorf("substate-cli storage command requires exactly 2 arguments")
 	}
 

@@ -18,7 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
 	"github.com/ethereum/go-ethereum/tests"
-	cli "gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 // record-replay: replay-fork command
@@ -28,12 +28,12 @@ var ReplayForkCommand = cli.Command{
 	Usage:     "executes and check output consistency of all transactions in the range with the given hard-fork",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
-		substate.WorkersFlag,
-		substate.SkipTransferTxsFlag,
-		substate.SkipCallTxsFlag,
-		substate.SkipCreateTxsFlag,
-		HardForkFlag,
-		substate.SubstateDirFlag,
+		&substate.WorkersFlag,
+		&substate.SkipTransferTxsFlag,
+		&substate.SkipCallTxsFlag,
+		&substate.SkipCreateTxsFlag,
+		&HardForkFlag,
+		&substate.SubstateDirFlag,
 	},
 	Description: `
 The replay-fork command requires two arguments:
@@ -333,7 +333,7 @@ func replayForkTask(block uint64, tx int, recording *substate.Substate, taskPool
 func replayForkAction(ctx *cli.Context) error {
 	var err error
 
-	if len(ctx.Args()) != 2 {
+	if ctx.Args().Len() != 2 {
 		return fmt.Errorf("substate-cli replay-fork command requires exactly 2 arguments")
 	}
 

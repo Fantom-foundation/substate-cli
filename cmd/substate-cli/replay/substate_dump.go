@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/substate"
-	cli "gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 // substate-cli dump command
@@ -15,8 +15,8 @@ var SubstateDumpCommand = cli.Command{
 	Usage:     "returns content in substates in json format",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
-		substate.WorkersFlag,
-		substate.SubstateDirFlag,
+		&substate.WorkersFlag,
+		&substate.SubstateDirFlag,
 	},
 	Description: `
 The substate-cli dump command requires two arguments:
@@ -58,7 +58,7 @@ func substateDumpTask(block uint64, tx int, recording *substate.Substate, taskPo
 func substateDumpAction(ctx *cli.Context) error {
 	var err error
 
-	if len(ctx.Args()) != 2 {
+	if ctx.Args().Len() != 2 {
 		return fmt.Errorf("substate-cli dump cammand requires exactly 2 arguments")
 	}
 

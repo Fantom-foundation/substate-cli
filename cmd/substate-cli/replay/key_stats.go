@@ -5,7 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/substate"
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 // record-replay: substate-cli key-stats command
@@ -15,9 +15,9 @@ var GetKeyStatsCommand = cli.Command{
 	Usage:     "computes usage statistics of accessed storage locations",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
-		substate.WorkersFlag,
-		substate.SubstateDirFlag,
-		ChainIDFlag,
+		&substate.WorkersFlag,
+		&substate.SubstateDirFlag,
+		&ChainIDFlag,
 	},
 	Description: `
 The substate-cli key-stats command requires two arguments:
