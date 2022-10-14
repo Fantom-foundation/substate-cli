@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum/substate"
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 // -------------------- Access Statistic Data Structure --------------------------
@@ -98,7 +98,7 @@ func getReferenceStatsAction[T comparable](ctx *cli.Context, cli_command string,
 func getReferenceStatsActionWithConsumer[T comparable](ctx *cli.Context, cli_command string, extract Extractor[T], consume AccessStatisticsConsumer[T]) error {
 	var err error
 
-	if len(ctx.Args()) != 2 {
+	if ctx.Args().Len() != 2 {
 		return fmt.Errorf("substate-cli %v command requires exactly 2 arguments", cli_command)
 	}
 

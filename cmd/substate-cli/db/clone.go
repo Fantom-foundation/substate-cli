@@ -6,7 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/substate"
-	cli "gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 var CloneCommand = cli.Command{
@@ -15,7 +15,7 @@ var CloneCommand = cli.Command{
 	Usage:     "Create a clone DB of a given range of blocks",
 	ArgsUsage: "<srcPath> <dstPath> <blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
-		substate.WorkersFlag,
+		&substate.WorkersFlag,
 	},
 	Description: `
 The substate-cli db clone command requires four arguments:
@@ -29,7 +29,7 @@ last block of the inclusive range of blocks to clone.`,
 func clone(ctx *cli.Context) error {
 	var err error
 
-	if len(ctx.Args()) != 4 {
+	if ctx.Args().Len() != 4 {
 		return fmt.Errorf("substate-cli db clone command requires exactly 4 arguments")
 	}
 

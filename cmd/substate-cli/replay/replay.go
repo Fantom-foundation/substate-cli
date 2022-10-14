@@ -24,7 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/substate"
-	cli "gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 // record-replay: substate-cli replay command
@@ -34,21 +34,21 @@ var ReplayCommand = cli.Command{
 	Usage:     "executes full state transitions and check output consistency",
 	ArgsUsage: "<blockNumFirst> <blockNumLast>",
 	Flags: []cli.Flag{
-		substate.WorkersFlag,
-		substate.SkipTransferTxsFlag,
-		substate.SkipCallTxsFlag,
-		substate.SkipCreateTxsFlag,
-		substate.SubstateDirFlag,
-		ChainIDFlag,
-		ProfileEVMCallFlag,
-		MicroProfilingFlag,
-		BasicBlockProfilingFlag,
-		DatabaseNameFlag,
-		ChannelBufferSizeFlag,
-		InterpreterImplFlag,
-		OnlySuccessfulFlag,
-		CpuProfilingFlag,
-		UseInMemoryStateDbFlag,
+		&substate.WorkersFlag,
+		&substate.SkipTransferTxsFlag,
+		&substate.SkipCallTxsFlag,
+		&substate.SkipCreateTxsFlag,
+		&substate.SubstateDirFlag,
+		&ChainIDFlag,
+		&ProfileEVMCallFlag,
+		&MicroProfilingFlag,
+		&BasicBlockProfilingFlag,
+		&DatabaseNameFlag,
+		&ChannelBufferSizeFlag,
+		&InterpreterImplFlag,
+		&OnlySuccessfulFlag,
+		&CpuProfilingFlag,
+		&UseInMemoryStateDbFlag,
 	},
 	Description: `
 The substate-cli replay command requires two arguments:
@@ -359,7 +359,7 @@ func NewBasicBlockProfilingCollectorContext() *BasicBlockProfilingCollectorConte
 func replayAction(ctx *cli.Context) error {
 	var err error
 
-	if len(ctx.Args()) != 2 {
+	if ctx.Args().Len() != 2 {
 		return fmt.Errorf("substate-cli replay command requires exactly 2 arguments")
 	}
 
