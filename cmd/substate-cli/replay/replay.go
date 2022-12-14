@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+
 	//"github.com/ethereum/go-ethereum/core/state"
 	"github.com/Fantom-foundation/go-opera/evmcore"
 	"github.com/Fantom-foundation/go-opera/opera"
@@ -137,7 +138,7 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 
 	var statedb state.StateDB
 	if config.use_in_memory_db {
-		statedb = state.MakeInMemoryStateDB(&inputAlloc)
+		statedb = state.MakeInMemoryStateDB(&inputAlloc, block)
 	} else {
 		statedb = state.MakeOffTheChainStateDB(inputAlloc)
 	}

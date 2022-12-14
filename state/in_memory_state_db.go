@@ -24,8 +24,8 @@ type StateDB interface {
 
 // MakeInMemoryStateDB creates a StateDB instance reflecting the state
 // captured by the provided Substate allocation.
-func MakeInMemoryStateDB(alloc *substate.SubstateAlloc) StateDB {
-	return &inMemoryStateDB{alloc: alloc, state: makeSnapshot(nil, 0)}
+func MakeInMemoryStateDB(alloc *substate.SubstateAlloc, block uint64) StateDB {
+	return &inMemoryStateDB{alloc: alloc, state: makeSnapshot(nil, 0), touchedSlots: map[slot]int{}, createdAccount: map[common.Address]int{}, blockNum: block}
 }
 
 // inMemoryStateDB implements the interface of a state.StateDB and can be
@@ -34,6 +34,9 @@ type inMemoryStateDB struct {
 	alloc            *substate.SubstateAlloc
 	state            *snapshot
 	snapshot_counter int
+	touchedSlots     map[slot]int
+	createdAccount   map[common.Address]int
+	blockNum         uint64
 }
 
 type slot struct {
@@ -79,6 +82,12 @@ func makeSnapshot(parent *snapshot, id int) *snapshot {
 }
 
 func (db *inMemoryStateDB) CreateAccount(addr common.Address) {
+	// TODO not a nice solution, but as inMemoryStateDB
+	// doesn't include journal as statedb has, this works to replay
+	// blocks to 50M
+	if db.blockNum > 46051750 {
+		db.createdAccount[addr] = 0
+	}
 	// ignored
 }
 
@@ -276,6 +285,9 @@ func (db *inMemoryStateDB) AddAddressToAccessList(addr common.Address) {
 func (db *inMemoryStateDB) AddSlotToAccessList(addr common.Address, key common.Hash) {
 	db.AddAddressToAccessList(addr)
 	db.state.accessed_slots[slot{addr, key}] = 0
+	if _, exists := db.createdAccount[addr]; exists {
+		db.touchedSlots[slot{addr, key}] = 0
+	}
 }
 
 func (db *inMemoryStateDB) RevertToSnapshot(id int) {
@@ -395,6 +407,13 @@ func (db *inMemoryStateDB) GetSubstatePostAlloc() substate.SubstateAlloc {
 		entry.Code = value.Code
 		for key, value := range value.Storage {
 			entry.Storage[key] = value
+		}
+	}
+	for slot := range db.touchedSlots {
+		if _, exist := res[slot.addr]; exist {
+			if _, contain := res[slot.addr].Storage[slot.key]; !contain {
+				res[slot.addr].Storage[slot.key] = common.Hash{}
+			}
 		}
 	}
 
