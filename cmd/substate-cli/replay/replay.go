@@ -120,8 +120,14 @@ func replayTask(config ReplayConfig, block uint64, tx int, recording *substate.S
 
 	chainConfig = params.AllEthashProtocolChanges
 	chainConfig.ChainID = big.NewInt(int64(chainID))
-	chainConfig.LondonBlock = new(big.Int).SetUint64(37534833)
-	chainConfig.BerlinBlock = new(big.Int).SetUint64(37455223)
+	switch chainID {
+	case 250:
+		chainConfig.LondonBlock = new(big.Int).SetUint64(37534833)
+		chainConfig.BerlinBlock = new(big.Int).SetUint64(37455223)
+	case 4002:
+		chainConfig.LondonBlock = new(big.Int).SetUint64(7513335)
+		chainConfig.BerlinBlock = new(big.Int).SetUint64(1559470)
+	}
 
 	var hashError error
 	getHash := func(num uint64) common.Hash {
