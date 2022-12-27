@@ -64,6 +64,11 @@ var (
 		Usage: "Contract database name for smart contracts",
 		Value: "./contracts.db",
 	}
+	DeletedAccountDirFlag = cli.StringFlag{
+		Name:  "deleted-account-dir",
+		Usage: "set a directory for deleted accouint database",
+		Value: "./deleted_accounts.db",
+	}
 )
 
 func SetBlockRange(firstArg string, lastArg string) (uint64, uint64, error) {
