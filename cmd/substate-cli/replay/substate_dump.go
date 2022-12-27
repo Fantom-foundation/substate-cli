@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/substate"
 	"github.com/urfave/cli/v2"
 )
@@ -28,7 +29,7 @@ last block of the inclusive range of blocks to replay transactions.`,
 
 // replayTask replays a transaction substate
 func substateDumpTask(block uint64, tx int, recording *substate.Substate, taskPool *substate.SubstateTaskPool) error {
-
+	sfc := common.HexToAddress("0xFC00FACE00000000000000000000000000000000")
 	inputAlloc := recording.InputAlloc
 	inputEnv := recording.Env
 	inputMessage := recording.Message
@@ -40,6 +41,9 @@ func substateDumpTask(block uint64, tx int, recording *substate.Substate, taskPo
 	var jbytes []byte
 	jbytes, _ = json.MarshalIndent(inputAlloc, "", " ")
 	out += fmt.Sprintf("Recorded input substate:\n%s\n", jbytes)
+	if account, ok := inputAlloc[sfc]; ok {
+		out += fmt.Sprintf("Input SFC Code len: %v\n", len(account.Code))
+	}
 	jbytes, _ = json.MarshalIndent(inputEnv, "", " ")
 	out += fmt.Sprintf("Recorded input environmnet:\n%s\n", jbytes)
 	jbytes, _ = json.MarshalIndent(inputMessage, "", " ")
@@ -48,6 +52,9 @@ func substateDumpTask(block uint64, tx int, recording *substate.Substate, taskPo
 	out += fmt.Sprintf("Recorded output substate:\n%s\n", jbytes)
 	jbytes, _ = json.MarshalIndent(outputResult, "", " ")
 	out += fmt.Sprintf("Recorded output result:\n%s\n", jbytes)
+	if account, ok := outputAlloc[sfc]; ok {
+		out += fmt.Sprintf("Output SFC Code len: %v\n", len(account.Code))
+	}
 
 	fmt.Println(out)
 
